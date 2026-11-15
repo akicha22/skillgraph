@@ -1,40 +1,40 @@
-import { useEffect, useState } from "react";
-
-type Health = {
-  status: string;
-  database: string;
-  users: number;
-  aiProvider: string;
-};
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { AuthProvider } from "./hooks/useAuth";
+import ProtectedRoute from "./components/ProtectedRoute";
+import Home from "./pages/Home";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import CandidateDashboard from "./pages/CandidateDashboard";
+import RecruiterDashboard from "./pages/RecruiterDashboard";
 
 export default function App() {
-  const [health, setHealth] = useState<Health | null>(null);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    fetch("/api/health")
-      .then((r) => r.json())
-      .then(setHealth)
-      .catch(() => setError("Cannot reach the backend"));
-  }, []);
-
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
-      <div className="w-96 rounded-2xl border border-slate-800 bg-slate-900 p-8">
-        <h1 className="text-2xl font-semibold">SkillGraph</h1>
-        <p className="mt-1 text-sm text-slate-400">Foundation check</p>
-
-        {error && <p className="mt-6 text-red-400">{error}</p>}
-
-        {health && (
-          <dl className="mt-6 space-y-2 text-sm">
-            <div className="flex justify-between"><dt className="text-slate-400">API</dt><dd>{health.status}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-400">Database</dt><dd>{health.database}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-400">Users</dt><dd>{health.users}</dd></div>
-            <div className="flex justify-between"><dt className="text-slate-400">AI provider</dt><dd>{health.aiProvider}</dd></div>
-          </dl>
-        )}
-      </div>
-    </main>
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register/candidate" element={<Register key="candidate" role="CANDIDATE" />} />
+          <Route path="/register/recruiter" element={<Register key="recruiter" role="RECRUITER" />} />
+          <Route
+            path="/candidate"
+            element={
+              <ProtectedRoute role="CANDIDATE">
+                <CandidateDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recruiter"
+            element={
+              <ProtectedRoute role="RECRUITER">
+                <RecruiterDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
