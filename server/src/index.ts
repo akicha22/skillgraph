@@ -7,6 +7,8 @@ import cookieParser from "cookie-parser";
 import { authRouter } from "./routes/auth";
 import { candidateGuardRouter, recruiterGuardRouter } from "./routes/guardChecks";
 import { errorHandler } from "./middleware/errors";
+import { skillsRouter } from "./routes/skills";
+import { candidateSkillsRouter } from "./routes/candidateSkills";
 
 const app = express();
 app.use(cors({ origin: "http://localhost:5173", credentials: true }));
@@ -26,6 +28,8 @@ app.get("/api/health", async (_req, res) => {
 const port = Number(process.env.PORT ?? 4000);
 
 app.use("/api/auth", authRouter);
+app.use("/api/skills", skillsRouter);
+app.use("/api/candidate/skills", candidateSkillsRouter);
 app.use("/api/candidate", candidateGuardRouter);
 app.use("/api/recruiter", recruiterGuardRouter);
 

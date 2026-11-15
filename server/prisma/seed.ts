@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { prisma } from "../src/db";
 import { hashPassword } from "../src/auth/password";
+import { seedSkills } from "./seedSkills";
 
 const DEMO_PASSWORD = "Demo@12345";
 
@@ -28,6 +29,8 @@ async function main() {
 
   console.log("Demo accounts ready (password for all: " + DEMO_PASSWORD + "):");
   for (const u of demoUsers) console.log(`  ${u.role.padEnd(9)} ${u.email}`);
+
+  await seedSkills();
 }
 
 main()
