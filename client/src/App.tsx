@@ -6,6 +6,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import CandidateDashboard from "./pages/CandidateDashboard";
 import RecruiterDashboard from "./pages/RecruiterDashboard";
+import MySkills from "./pages/MySkills";
 
 export default function App() {
   return (
@@ -15,6 +16,14 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register/candidate" element={<Register key="candidate" role="CANDIDATE" />} />
+          <Route
+  path="/candidate/skills"
+  element={
+    <ProtectedRoute role="CANDIDATE">
+      <MySkills />
+    </ProtectedRoute>
+  }
+/>
           <Route path="/register/recruiter" element={<Register key="recruiter" role="RECRUITER" />} />
           <Route
             path="/candidate"

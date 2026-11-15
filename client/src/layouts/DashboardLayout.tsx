@@ -1,5 +1,15 @@
 import type { ReactNode } from "react";
+import { NavLink } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import type { Role } from "../types/auth";
+
+const navByRole: Record<Role, { to: string; label: string; end?: boolean }[]> = {
+  CANDIDATE: [
+    { to: "/candidate", label: "Overview", end: true },
+    { to: "/candidate/skills", label: "My skills" },
+  ],
+  RECRUITER: [{ to: "/recruiter", label: "Overview", end: true }],
+};
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
@@ -27,6 +37,26 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             </button>
           </div>
         </div>
+        {user && (
+          <nav className="mx-auto flex max-w-5xl gap-1 px-4" aria-label="Dashboard">
+            {navByRole[user.role].map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) =>
+                  `border-b-2 px-3 py-2 text-sm font-medium ${
+                    isActive
+                      ? "border-indigo-600 text-indigo-700"
+                      : "border-transparent text-slate-500 hover:text-slate-800"
+                  }`
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+        )}
       </header>
       <main className="mx-auto max-w-5xl space-y-6 px-4 py-8">{children}</main>
     </div>
