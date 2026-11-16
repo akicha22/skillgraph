@@ -17,6 +17,8 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   candidateSkills CandidateSkill[]
+  assessments Assessment[]
+  auditLogs   AuditLog[]
 }
 model SkillDomain {
   id          String   @id @default(cuid())
@@ -43,6 +45,8 @@ model Skill {
   candidateSkills CandidateSkill[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
+  assessmentVersionSkills AssessmentVersionSkill[]
+  assessmentTasks         AssessmentTask[]
 
   @@index([domainId])
 }
@@ -72,4 +76,103 @@ model CandidateSkill {
 
   @@unique([userId, skillId])
   @@index([skillId])
+}
+model Assessment {
+  id          String              @id @default(cuid())
+  ownerId     String
+  owner       User                @relation(fields: [ownerId], references: [id])
+  jobTitle    String
+  companyName String
+  versions    AssessmentVersion[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([ownerId])
+}
+
+model AssessmentVersion {
+  id                    String                   @id @default(cuid())
+  assessmentId          String
+  assessment            Assessment               @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  versionNumber         Int
+  status                String                   @default("DRAFT") // DRAFT | PUBLISHED
+  requirementsText      String
+  title                 String
+  description           String
+  jobContext            String
+  candidateInstructions String
+  targetLevel           String // INTERN | FRESHER | JUNIOR | MID | SENIOR
+  difficulty            String // BEGINNER | INTERMEDIATE | ADVANCED
+  durationMinutes       Int
+  aiPolicy              String                   @default("NOT_ALLOWED") // NOT_ALLOWED | ALLOWED_DISCLOSED
+  generationMethod      String // TEMPLATE | AI | MANUAL
+  generationModel       String?
+  generatedAt           DateTime?
+  publishedAt           DateTime?
+  skills                AssessmentVersionSkill[]
+  tasks                 AssessmentTask[]
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+
+  @@unique([assessmentId, versionNumber])
+}
+
+model AssessmentVersionSkill {
+  id        String            @id @default(cuid())
+  versionId String
+  skillId   String
+  weight    Int // percentage; weights in a version add up to 100
+  source    String            @default("REQUESTED") // REQUESTED | SUGGESTED_APPROVED
+  version   AssessmentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  skill     Skill             @relation(fields: [skillId], references: [id])
+
+  @@unique([versionId, skillId])
+  @@index([skillId])
+}
+
+model AssessmentTask {
+  id          String                      @id @default(cuid())
+  versionId   String
+  position    Int
+  type        String // STRUCTURED_RESPONSE | DATA_ANALYTICAL | FILE_SUBMISSION
+  skillId     String
+  title       String
+  prompt      String
+  marks       Int
+  timeMinutes Int
+  publicData  String                      @default("{}") // JSON text, candidate-visible
+  privateData String                      @default("{}") // JSON text, NEVER sent to candidates
+  version     AssessmentVersion           @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  skill       Skill                       @relation(fields: [skillId], references: [id])
+  rubric      AssessmentRubricCriterion[]
+
+  @@unique([versionId, position])
+  @@index([skillId])
+}
+
+model AssessmentRubricCriterion {
+  id              String         @id @default(cuid())
+  taskId          String
+  position        Int
+  name            String // candidate-visible
+  description     String // candidate-visible
+  maxMarks        Int // candidate-visible
+  privateGuidance String // evaluator-only
+  task            AssessmentTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, position])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String
+  metadata   String? // JSON text
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId])
 }
