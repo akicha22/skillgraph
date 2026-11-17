@@ -3,7 +3,7 @@ import type { BlueprintContext, BlueprintTask, AssessmentType } from "./blueprin
 import { buildTaskForSkill, buildGenericTask, hasSpecificBlueprint, getSpecificBuilder } from "./blueprints/index.js";
 import { ASSESSMENT_TYPES } from "../skills/assessmentTypes.js";
 import { Level, Difficulty } from "./constants.js";
-import type { GeneratedAssessment } from "./schema.js";
+import type { DraftWording, GeneratedAssessment } from "./schema.js";
 import { generatedAssessmentSchema } from "./schema.js";
 import { parseRequirements } from "./requirementParser.js";
 
@@ -88,6 +88,18 @@ function convertAssessmentType(type: string): string {
   return type;
 }
 
+const MAX_PROMPT_LENGTH = 4000;
+
+// Applies wording overrides to a task. The coded prompt (and therefore every fact it
+// carries) is kept; only the title and a short framing paragraph can change.
+function applyTaskWording(task: BlueprintTask, wording: { title?: string; brief: string }): void {
+  if (wording.title) task.title = wording.title;
+  const brief = wording.brief.trim();
+  if (!brief) return;
+  if (brief.length + 2 + task.prompt.length > MAX_PROMPT_LENGTH) return;
+  task.prompt = `${brief}\n\n${task.prompt}`;
+}
+
 // Main assembler function
 export async function assembleAssessment(
   config: {
@@ -102,6 +114,10 @@ export async function assembleAssessment(
     preferredAssessmentTypes?: string[];
     aiPolicy: "NOT_ALLOWED" | "ALLOWED_DISCLOSED";
     targetSkills: Array<{ skillSlug: string; weight: number; subskills: string[]; source: "REQUESTED" | "SUGGESTED_APPROVED" }>;
+    /** Fixes the blueprint seed so two passes produce identical facts. */
+    seed?: number;
+    /** Wording-only overrides (AI or editor); never affects marks, rubrics or answer keys. */
+    aiWording?: DraftWording;
   },
   prisma: any // Prisma client
 ): Promise<GeneratedAssessment> {
@@ -139,7 +155,7 @@ export async function assembleAssessment(
   }
 
   // 4. Build blueprint context
-  const seed = Date.now();
+  const seed = config.seed ?? Date.now();
   const ctx: BlueprintContext = {
     seed,
     theme: "retail",
@@ -207,6 +223,8 @@ export async function assembleAssessment(
         const base = taskClone.title.split(":")[0];
         taskClone.title = `${base}: task ${t + 1}`;
       }
+      const wording = config.aiWording?.tasks.find((w) => w.skillSlug === skillConfig.skillSlug);
+      if (wording) applyTaskWording(taskClone, wording);
       tasks.push(taskClone);
     }
   }
@@ -240,16 +258,23 @@ export async function assembleAssessment(
   });
 
   // 10. Build final assessment
+  const wording = config.aiWording;
   const assessment: GeneratedAssessment = {
-    title: finalConfig.jobTitle ? `${finalConfig.jobTitle} Assessment` : "Skills Assessment",
+    title:
+      wording?.title ?? (finalConfig.jobTitle ? `${finalConfig.jobTitle} Assessment` : "Skills Assessment"),
     description:
-      finalConfig.description && finalConfig.description.trim().length >= 10
+      wording?.description ??
+      (finalConfig.description && finalConfig.description.trim().length >= 10
         ? finalConfig.description
-        : "Assessment generated from the stated job requirements.",
-    jobContext: finalConfig.companyName
-      ? `Company: ${finalConfig.companyName}. Complete the tasks in this workplace context.`
-      : "Complete the tasks in the stated workplace context.",
-    candidateInstructions: "Complete all tasks within the given time. Your responses will be evaluated using the rubrics provided.",
+        : "Assessment generated from the stated job requirements."),
+    jobContext:
+      wording?.jobContext ??
+      (finalConfig.companyName
+        ? `Company: ${finalConfig.companyName}. Complete the tasks in this workplace context.`
+        : "Complete the tasks in the stated workplace context."),
+    candidateInstructions:
+      wording?.candidateInstructions ??
+      "Complete all tasks within the given time. Your responses will be evaluated using the rubrics provided.",
     targetSkills: finalConfig.targetSkills.map((s) => ({
       skillSlug: s.skillSlug,
       weight: s.weight,

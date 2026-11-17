@@ -66,3 +66,30 @@ export const generatedAssessmentSchema = z
 
 export type GeneratedAssessment = z.infer<typeof generatedAssessmentSchema>;
 export type GeneratedTask = z.infer<typeof taskSchema>;
+
+/**
+ * Wording-only overrides for a draft (AI output or a future manual editor).
+ * Numbers, datasets, rubrics and answer keys cannot be changed through this schema.
+ */
+export const draftWordingSchema = z
+  .object({
+    title: text(5, 150),
+    description: text(10, 600),
+    jobContext: text(10, 1200),
+    candidateInstructions: text(20, 2000),
+    tasks: z
+      .array(
+        z
+          .object({
+            skillSlug: text(1, 80),
+            title: text(5, 120).optional(),
+            brief: text(20, 400),
+          })
+          .strict(),
+      )
+      .max(8)
+      .default([]),
+  })
+  .strict();
+
+export type DraftWording = z.infer<typeof draftWordingSchema>;

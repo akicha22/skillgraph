@@ -7,7 +7,8 @@ import type { Level, Difficulty } from "../assessments/constants";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { asyncHandler } from "../utils/asyncHandler";
 import { generationSchema } from "../assessments/generationSchema";
-import { assembleAssessment } from "../assessments/assembler";
+import { generateAssessmentDraft } from "../ai";
+import { env } from "../env";
 
 export const recruiterAssessmentsRouter = Router();
 recruiterAssessmentsRouter.use(requireAuth, requireRole("RECRUITER"));
@@ -122,20 +123,28 @@ recruiterAssessmentsRouter.post(
         res.status(400).json({ error: "Task count cannot be lower than the number of selected skills" });
         return;
     }
-    // Assemble assessment
-    const assembled = await assembleAssessment({
-      requirementsText: finalConfig.requirementsText,
-      jobTitle: finalConfig.jobTitle,
-      companyName: finalConfig.companyName,
-      description: finalConfig.description,
-      targetLevel: finalConfig.targetLevel,
-      difficulty: finalConfig.difficulty,
-      durationMinutes: finalConfig.durationMinutes,
-      taskCount: finalConfig.taskCount,
-      preferredAssessmentTypes: finalConfig.preferredAssessmentTypes,
-      aiPolicy: finalConfig.aiPolicy,
-      targetSkills: finalConfig.targetSkills,
-    }, prisma);
+    // Generate the draft: AI wording when a provider is configured, template otherwise.
+    // Every provider failure falls back to template generation with a recorded reason.
+    const draft = await generateAssessmentDraft(
+      {
+        requirementsText: finalConfig.requirementsText,
+        jobTitle: finalConfig.jobTitle,
+        companyName: finalConfig.companyName,
+        description: finalConfig.description,
+        targetLevel: finalConfig.targetLevel,
+        difficulty: finalConfig.difficulty,
+        durationMinutes: finalConfig.durationMinutes,
+        taskCount: finalConfig.taskCount,
+        preferredAssessmentTypes: finalConfig.preferredAssessmentTypes,
+        aiPolicy: finalConfig.aiPolicy,
+        targetSkills: finalConfig.targetSkills,
+      },
+      {
+        prisma,
+        ai: { provider: env.AI_PROVIDER, apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL },
+      },
+    );
+    const assembled = draft.assembled;
     // Persist in transaction
     const result = await prisma.$transaction(async (tx) => {
         // Create Assessment root
@@ -162,8 +171,8 @@ recruiterAssessmentsRouter.post(
                 difficulty: finalConfig.difficulty,
                 durationMinutes: finalConfig.durationMinutes,
                 aiPolicy: finalConfig.aiPolicy,
-                generationMethod: "TEMPLATE",
-                generationModel: null,
+                generationMethod: draft.generationMethod,
+                generationModel: draft.generationModel,
                 generatedAt: new Date(),
             },
         });
@@ -216,7 +225,9 @@ recruiterAssessmentsRouter.post(
                 entityId: assessment.id,
                 metadata: JSON.stringify({
                     versionId: version.id,
-                    generationMethod: "TEMPLATE",
+                    generationMethod: draft.generationMethod,
+                    generationModel: draft.generationModel,
+                    aiFallback: draft.aiFallback?.code ?? null,
                 }),
             },
         });
@@ -229,7 +240,8 @@ recruiterAssessmentsRouter.post(
         versionNumber: result.version.versionNumber,
         status: result.version.status,
         generationMethod: result.version.generationMethod,
-        generationModel: null,
+        generationModel: result.version.generationModel,
+        aiFallback: draft.aiFallback,
         assembled,
     });
   }),

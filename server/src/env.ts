@@ -6,6 +6,10 @@ const schema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 characters"),
   NODE_ENV: z.string().default("development"),
+  // AI is optional. "template" (the default) needs no key and is never labelled AI.
+  AI_PROVIDER: z.string().trim().toLowerCase().default("template"),
+  GEMINI_API_KEY: z.string().trim().optional(),
+  GEMINI_MODEL: z.string().trim().optional(),
 });
 
 const parsed = schema.safeParse(process.env);
