@@ -8,7 +8,14 @@ import { requireAuth, requireRole } from "../middleware/auth";
 import { asyncHandler } from "../utils/asyncHandler";
 import { generationSchema } from "../assessments/generationSchema";
 import { generateAssessmentDraft } from "../ai";
-import { DraftValidationError, draftUpdateSchema, planDraftUpdate, serializeDraft } from "../assessments/draft";
+import {
+  buildVersionCopy,
+  DraftValidationError,
+  draftUpdateSchema,
+  planDraftUpdate,
+  publishIssues,
+  serializeDraft,
+} from "../assessments/draft";
 import { env } from "../env";
 
 export const recruiterAssessmentsRouter = Router();
@@ -17,6 +24,10 @@ recruiterAssessmentsRouter.use(requireAuth, requireRole("RECRUITER"));
 // Express 5 types route params as string | string[]; these routes only ever take one value.
 function routeParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
+}
+
+function isUniqueConstraintError(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "code" in err && (err as { code?: unknown }).code === "P2002";
 }
 
 const parseSchema = z.object({
@@ -86,6 +97,13 @@ recruiterAssessmentsRouter.post(
     }
     // Validate subskills belong to parent skills
     const skillMap = new Map(skills.map((s: { slug: string; subskills: { slug: string }[] }) => [s.slug, s]));
+    // Rows store the skill's database id; the API speaks slugs.
+    const skillIdBySlug = new Map<string, string>(skills.map((s) => [s.slug, s.id]));
+    const skillIdFor = (slug: string): string => {
+        const id = skillIdBySlug.get(slug);
+        if (!id) throw new Error(`Skill "${slug}" disappeared between validation and save`);
+        return id;
+    };
     for (const skill of targetSkills as Array<{ skillSlug: string; subskills: string[] }>) {
         const skillRecord = skillMap.get(skill.skillSlug);
         if (!skillRecord) continue;
@@ -159,7 +177,6 @@ recruiterAssessmentsRouter.post(
                 ownerId: currentUser.id,
                 jobTitle: finalConfig.jobTitle ?? "Assessment",
                 companyName,
-                requirementsText,
             },
         });
         // Create first version
@@ -187,7 +204,7 @@ recruiterAssessmentsRouter.post(
             await tx.assessmentVersionSkill.create({
                 data: {
                     versionId: version.id,
-                    skillId: skill.skillSlug,
+                    skillId: skillIdFor(skill.skillSlug),
                     weight: skill.weight,
                     source: skill.source,
                     selectedSubskills: JSON.stringify(skill.subskills),
@@ -202,7 +219,7 @@ recruiterAssessmentsRouter.post(
                     versionId: version.id,
                     position: taskIdx,
                     type: task.type,
-                    skillId: task.skillSlug,
+                    skillId: skillIdFor(task.skillSlug),
                     title: task.title,
                     prompt: task.prompt,
                     marks: task.marks,
@@ -407,5 +424,230 @@ recruiterAssessmentsRouter.patch(
     });
 
     res.json(serializeDraft(updated));
+  }),
+);
+
+// ---------- publish and versioning (4D-2) ----------
+
+recruiterAssessmentsRouter.post(
+  "/:assessmentId/versions/:versionId/publish",
+  asyncHandler(async (req, res) => {
+    const currentUser = res.locals.user;
+    if (!currentUser || currentUser.role !== "RECRUITER") {
+      res.status(403).json({ error: "Recruiter role required" });
+      return;
+    }
+
+    const assessmentId = routeParam(req.params.assessmentId);
+    const versionId = routeParam(req.params.versionId);
+
+    const version = await prisma.assessmentVersion.findFirst({
+      where: {
+        id: versionId,
+        assessmentId,
+        assessment: { ownerId: currentUser.id },
+      },
+      include: {
+        assessment: true,
+        skills: { include: { skill: { include: { subskills: true } } } },
+        tasks: {
+          orderBy: { position: "asc" },
+          include: { skill: true, rubric: { orderBy: { position: "asc" } } },
+        },
+      },
+    });
+
+    if (!version) {
+      res.status(404).json({ error: "Assessment draft not found" });
+      return;
+    }
+
+    if (version.status === "PUBLISHED") {
+      res.status(409).json({ error: "This version is already published." });
+      return;
+    }
+    if (version.status !== "DRAFT") {
+      res.status(409).json({ error: `Only a draft can be published (this version is ${version.status}).` });
+      return;
+    }
+
+    const issues = publishIssues(version);
+    if (issues.length > 0) {
+      res.status(400).json({ error: "This draft is not ready to publish", details: issues });
+      return;
+    }
+
+    const published = await prisma.$transaction(async (tx) => {
+      const updated = await tx.assessmentVersion.update({
+        where: { id: version.id },
+        data: { status: "PUBLISHED", publishedAt: new Date() },
+        include: {
+          assessment: true,
+          skills: { include: { skill: { include: { subskills: true } } } },
+          tasks: {
+            orderBy: { position: "asc" },
+            include: { skill: true, rubric: { orderBy: { position: "asc" } } },
+          },
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorId: currentUser.id,
+          action: "PUBLISH_ASSESSMENT_VERSION",
+          entityType: "AssessmentVersion",
+          entityId: version.id,
+          metadata: JSON.stringify({
+            assessmentId: version.assessmentId,
+            versionNumber: version.versionNumber,
+            durationMinutes: version.durationMinutes,
+          }),
+        },
+      });
+
+      return updated;
+    });
+
+    res.json(serializeDraft(published));
+  }),
+);
+
+recruiterAssessmentsRouter.post(
+  "/:assessmentId/versions/:versionId/new-version",
+  asyncHandler(async (req, res) => {
+    const currentUser = res.locals.user;
+    if (!currentUser || currentUser.role !== "RECRUITER") {
+      res.status(403).json({ error: "Recruiter role required" });
+      return;
+    }
+
+    const assessmentId = routeParam(req.params.assessmentId);
+    const versionId = routeParam(req.params.versionId);
+
+    const source = await prisma.assessmentVersion.findFirst({
+      where: {
+        id: versionId,
+        assessmentId,
+        assessment: { ownerId: currentUser.id },
+      },
+      include: {
+        assessment: true,
+        skills: { include: { skill: { include: { subskills: true } } } },
+        tasks: {
+          orderBy: { position: "asc" },
+          include: { skill: true, rubric: { orderBy: { position: "asc" } } },
+        },
+      },
+    });
+
+    if (!source) {
+      res.status(404).json({ error: "Assessment version not found" });
+      return;
+    }
+
+    if (source.status !== "PUBLISHED") {
+      res.status(409).json({
+        error: "A new version can only be started from a published version. This one is still a draft, so edit it directly.",
+      });
+      return;
+    }
+
+    const latest = await prisma.assessmentVersion.findFirst({
+      where: { assessmentId },
+      orderBy: { versionNumber: "desc" },
+      select: { versionNumber: true },
+    });
+    const versionNumber = (latest?.versionNumber ?? 0) + 1;
+
+    try {
+      const created = await prisma.$transaction(async (tx) => {
+        const version = await tx.assessmentVersion.create({
+          data: buildVersionCopy(source, versionNumber),
+          include: {
+            assessment: true,
+            skills: { include: { skill: { include: { subskills: true } } } },
+            tasks: {
+              orderBy: { position: "asc" },
+              include: { skill: true, rubric: { orderBy: { position: "asc" } } },
+            },
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            actorId: currentUser.id,
+            action: "CREATE_ASSESSMENT_VERSION",
+            entityType: "AssessmentVersion",
+            entityId: version.id,
+            metadata: JSON.stringify({
+              assessmentId,
+              fromVersionId: source.id,
+              fromVersionNumber: source.versionNumber,
+              versionNumber,
+            }),
+          },
+        });
+
+        return version;
+      });
+
+      res.status(201).json(serializeDraft(created));
+    } catch (err) {
+      if (err instanceof DraftValidationError) {
+        res.status(409).json({ error: err.message, details: err.issues });
+        return;
+      }
+      if (isUniqueConstraintError(err)) {
+        res.status(409).json({ error: "Someone else created a new version at the same time. Reload and try again." });
+        return;
+      }
+      throw err;
+    }
+  }),
+);
+
+recruiterAssessmentsRouter.get(
+  "/:assessmentId/versions",
+  asyncHandler(async (req, res) => {
+    const currentUser = res.locals.user;
+    if (!currentUser || currentUser.role !== "RECRUITER") {
+      res.status(403).json({ error: "Recruiter role required" });
+      return;
+    }
+
+    const assessmentId = routeParam(req.params.assessmentId);
+
+    const assessment = await prisma.assessment.findFirst({
+      where: { id: assessmentId, ownerId: currentUser.id },
+      select: { id: true, jobTitle: true, companyName: true },
+    });
+
+    if (!assessment) {
+      res.status(404).json({ error: "Assessment not found" });
+      return;
+    }
+
+    const versions = await prisma.assessmentVersion.findMany({
+      where: { assessmentId },
+      orderBy: { versionNumber: "desc" },
+      select: {
+        id: true,
+        versionNumber: true,
+        status: true,
+        title: true,
+        difficulty: true,
+        durationMinutes: true,
+        generationMethod: true,
+        publishedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: { select: { tasks: true } },
+      },
+    });
+
+    res.json({
+      assessment,
+      versions: versions.map(({ _count, ...rest }) => ({ ...rest, taskCount: _count.tasks })),
+    });
   }),
 );

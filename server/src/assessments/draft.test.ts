@@ -1,9 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildVersionCopy,
   DraftValidationError,
   draftUpdateSchema,
   planDraftUpdate,
+  publishIssues,
   scaleRubric,
   serializeDraft,
   type DraftUpdate,
@@ -396,6 +398,92 @@ describe("scaleRubric", () => {
       { name: "B", description: "Second criterion", maxMarks: 10, privateGuidance: "guidance b" },
     ];
     assert.deepEqual(scaleRubric(rubric, 1), rubric);
+  });
+});
+
+// ---------- publish readiness (4D-2) ----------
+
+describe("publishIssues", () => {
+  it("accepts a complete draft", () => {
+    assert.deepEqual(publishIssues(baseVersion), []);
+  });
+
+  it("reports skill weights that do not total 100", () => {
+    const broken = clone();
+    broken.skills[0].weight = 20;
+    assert.ok(publishIssues(broken).some((issue) => issue.field === "skills"));
+  });
+
+  it("reports task marks that do not total 100", () => {
+    const broken = clone();
+    broken.tasks[0].marks = 30;
+    broken.tasks[0].rubric = [
+      { position: 0, name: "Revenue", description: "Correct revenue total", maxMarks: 30, privateGuidance: "Expected 123456" },
+    ];
+    assert.ok(publishIssues(broken).some((issue) => issue.field === "tasks" && /100/.test(issue.message)));
+  });
+
+  it("reports a rubric that does not match its task marks", () => {
+    const broken = clone();
+    broken.tasks[1].rubric[0].maxMarks = 5;
+    assert.ok(publishIssues(broken).some((issue) => issue.field === `tasks.${broken.tasks[1].id}.rubric`));
+  });
+
+  it("reports a task with no rubric criteria", () => {
+    const broken = clone();
+    broken.tasks[2].rubric = [];
+    assert.ok(publishIssues(broken).some((issue) => issue.field === `tasks.${broken.tasks[2].id}.rubric`));
+  });
+
+  it("reports a task that uses a skill outside the draft", () => {
+    const broken = clone();
+    broken.tasks[0].skill = { slug: "python", name: "Python" };
+    assert.ok(publishIssues(broken).some((issue) => issue.field === `tasks.${broken.tasks[0].id}`));
+  });
+
+  it("reports a draft with no tasks", () => {
+    const broken = clone();
+    broken.tasks = [];
+    assert.ok(publishIssues(broken).some((issue) => issue.field === "tasks"));
+  });
+});
+
+// ---------- version copy (4D-2) ----------
+
+describe("buildVersionCopy", () => {
+  const published = (): DraftVersionRecord => ({
+    ...clone(),
+    status: "PUBLISHED",
+    publishedAt: new Date("2026-11-20T10:00:00Z"),
+  });
+
+  it("copies a published version into a new draft", () => {
+    const copy = buildVersionCopy(published(), 2, () => new Date("2026-12-01T00:00:00Z"));
+
+    assert.equal(copy.versionNumber, 2);
+    assert.equal(copy.status, "DRAFT");
+    assert.equal(copy.assessmentId, "asm_1");
+    assert.equal(copy.durationMinutes, 45);
+    assert.equal(copy.skills.create.length, 3);
+    assert.equal(copy.tasks.create.length, 3);
+    assert.equal(copy.tasks.create[0].skillId, "sk_excel");
+    assert.equal(copy.tasks.create[2].skillId, "sk_neg");
+    assert.deepEqual(copy.tasks.create.map((t) => t.position), [0, 1, 2]);
+    // Private evaluation data travels with the copy, otherwise scoring would change.
+    assert.equal(copy.tasks.create[0].privateData, baseVersion.tasks[0].privateData);
+    assert.equal(copy.tasks.create[1].publicData, baseVersion.tasks[1].publicData);
+    assert.deepEqual(copy.tasks.create[0].rubric.create.map((r) => r.position), [0, 1]);
+    assert.equal(copy.generatedAt.toISOString(), "2026-12-01T00:00:00.000Z");
+    assert.equal(copy.title, baseVersion.title);
+  });
+
+  it("refuses to copy a task whose skill is not in the version", () => {
+    const broken = published();
+    broken.tasks[0].skill = { slug: "python", name: "Python" };
+    assert.throws(
+      () => buildVersionCopy(broken, 2),
+      (err: unknown) => err instanceof DraftValidationError,
+    );
   });
 });
 

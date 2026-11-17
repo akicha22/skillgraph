@@ -376,6 +376,173 @@ export function planDraftUpdate(current: DraftVersionRecord, update: DraftUpdate
   };
 }
 
+/**
+ * Everything that must be true before a draft can become an immutable published version.
+ * Publishing is the last moment criteria can change, so the whole draft is re-checked.
+ */
+export function publishIssues(version: DraftVersionRecord): DraftIssue[] {
+  const issues: DraftIssue[] = [];
+
+  if (version.skills.length === 0) {
+    issues.push({ field: "skills", message: "This draft has no skills, so it cannot be scored." });
+  } else {
+    const weights = version.skills.reduce((sum, row) => sum + row.weight, 0);
+    if (weights !== 100) {
+      issues.push({ field: "skills", message: `Skill weights must add up to 100 (currently ${weights}).` });
+    }
+  }
+
+  if (version.tasks.length === 0) {
+    issues.push({ field: "tasks", message: "This draft has no tasks." });
+  } else {
+    const marks = version.tasks.reduce((sum, task) => sum + task.marks, 0);
+    if (marks !== 100) {
+      issues.push({ field: "tasks", message: `Task marks must add up to 100 (currently ${marks}).` });
+    }
+
+    const minutes = currentTaskTotal(version.tasks);
+    if (minutes < MIN_DURATION || minutes > MAX_DURATION) {
+      issues.push({
+        field: "tasks",
+        message: `Total time must be between ${MIN_DURATION} and ${MAX_DURATION} minutes (currently ${minutes}).`,
+      });
+    }
+  }
+
+  const selected = new Set(version.skills.map((row) => row.skill.slug));
+  for (const task of version.tasks) {
+    if (!selected.has(task.skill.slug)) {
+      issues.push({
+        field: `tasks.${task.id}`,
+        message: `Task "${task.title}" uses ${task.skill.slug}, which is not one of this draft's skills.`,
+      });
+    }
+    if (task.prompt.trim().length < 20) {
+      issues.push({
+        field: `tasks.${task.id}.prompt`,
+        message: `Task "${task.title}" needs candidate instructions of at least 20 characters.`,
+      });
+    }
+    if (task.rubric.length === 0) {
+      issues.push({ field: `tasks.${task.id}.rubric`, message: `Task "${task.title}" has no rubric criteria.` });
+      continue;
+    }
+    const rubricSum = task.rubric.reduce((sum, criterion) => sum + criterion.maxMarks, 0);
+    if (rubricSum !== task.marks) {
+      issues.push({
+        field: `tasks.${task.id}.rubric`,
+        message: `Rubric marks (${rubricSum}) must equal the task marks (${task.marks}) for "${task.title}".`,
+      });
+    }
+  }
+
+  return issues;
+}
+
+export type VersionCopyData = {
+  assessmentId: string;
+  versionNumber: number;
+  status: string;
+  requirementsText: string;
+  title: string;
+  description: string;
+  jobContext: string;
+  candidateInstructions: string;
+  targetLevel: string;
+  difficulty: string;
+  durationMinutes: number;
+  aiPolicy: string;
+  generationMethod: string;
+  generationModel: string | null;
+  generatedAt: Date;
+  skills: { create: { skillId: string; weight: number; source: string; selectedSubskills: string }[] };
+  tasks: {
+    create: {
+      position: number;
+      type: string;
+      skillId: string;
+      title: string;
+      prompt: string;
+      marks: number;
+      timeMinutes: number;
+      publicData: string;
+      privateData: string;
+      rubric: { create: Array<DraftCriterion & { position: number }> };
+    }[];
+  };
+};
+
+/**
+ * Builds a brand-new DRAFT version from a published one. Content is copied exactly
+ * (including answer keys), so the new draft starts from what candidates were assessed on.
+ */
+export function buildVersionCopy(
+  source: DraftVersionRecord,
+  versionNumber: number,
+  now: () => Date = () => new Date(),
+): VersionCopyData {
+  const skillIdBySlug = new Map(source.skills.map((row) => [row.skill.slug, row.skillId]));
+
+  return {
+    assessmentId: source.assessmentId,
+    versionNumber,
+    status: "DRAFT",
+    requirementsText: source.requirementsText,
+    title: source.title,
+    description: source.description,
+    jobContext: source.jobContext,
+    candidateInstructions: source.candidateInstructions,
+    targetLevel: source.targetLevel,
+    difficulty: source.difficulty,
+    durationMinutes: source.durationMinutes,
+    aiPolicy: source.aiPolicy,
+    generationMethod: source.generationMethod,
+    generationModel: source.generationModel,
+    generatedAt: now(),
+    skills: {
+      create: source.skills.map((row) => ({
+        skillId: row.skillId,
+        weight: row.weight,
+        source: row.source,
+        selectedSubskills: row.selectedSubskills,
+      })),
+    },
+    tasks: {
+      create: source.tasks.map((task, position) => {
+        const skillId = skillIdBySlug.get(task.skill.slug);
+        if (!skillId) {
+          throw new DraftValidationError([
+            {
+              field: `tasks.${task.id}`,
+              message: `Task "${task.title}" uses ${task.skill.slug}, which is not part of this version.`,
+            },
+          ]);
+        }
+        return {
+          position,
+          type: task.type,
+          skillId,
+          title: task.title,
+          prompt: task.prompt,
+          marks: task.marks,
+          timeMinutes: task.timeMinutes,
+          publicData: task.publicData,
+          privateData: task.privateData,
+          rubric: {
+            create: task.rubric.map((criterion, i) => ({
+              position: i,
+              name: criterion.name,
+              description: criterion.description,
+              maxMarks: criterion.maxMarks,
+              privateGuidance: criterion.privateGuidance,
+            })),
+          },
+        };
+      }),
+    },
+  };
+}
+
 export type SerializedDraft = {
   id: string;
   assessmentId: string;
