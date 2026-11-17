@@ -118,6 +118,8 @@ model AssessmentVersion {
 }
 
 model AssessmentVersionSkill {
+  // NEW: Store selected subskill slugs as JSON array
+  selectedSubskills String @default("[]")
   id        String            @id @default(cuid())
   versionId String
   skillId   String

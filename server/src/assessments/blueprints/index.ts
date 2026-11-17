@@ -66,6 +66,8 @@ export function hasSpecificBlueprint(slug: string): boolean {
   return getSpecificBuilder(slug) !== null;
 }
 
+export { getSpecificBuilder };
+
 /**
  * Build a generic task for any skill.
  * The type is determined by the skill's first assessment type.
