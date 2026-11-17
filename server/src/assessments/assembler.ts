@@ -8,7 +8,8 @@ import { generatedAssessmentSchema } from "./schema.js";
 import { parseRequirements } from "./requirementParser.js";
 
 // Largest-remainder allocation so the parts always sum to `total` (no infinite loop).
-function allocateByWeights(total: number, weights: number[], minPerItem: number, label: string): number[] {
+// Shared with draft editing so rebalancing rules stay identical to generation.
+export function allocateByWeights(total: number, weights: number[], minPerItem: number, label: string): number[] {
   const count = weights.length;
   if (count === 0) return [];
   const minTotal = count * minPerItem;

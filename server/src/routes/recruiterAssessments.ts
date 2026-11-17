@@ -8,10 +8,16 @@ import { requireAuth, requireRole } from "../middleware/auth";
 import { asyncHandler } from "../utils/asyncHandler";
 import { generationSchema } from "../assessments/generationSchema";
 import { generateAssessmentDraft } from "../ai";
+import { DraftValidationError, draftUpdateSchema, planDraftUpdate, serializeDraft } from "../assessments/draft";
 import { env } from "../env";
 
 export const recruiterAssessmentsRouter = Router();
 recruiterAssessmentsRouter.use(requireAuth, requireRole("RECRUITER"));
+
+// Express 5 types route params as string | string[]; these routes only ever take one value.
+function routeParam(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
+}
 
 const parseSchema = z.object({
   text: z
@@ -39,7 +45,7 @@ recruiterAssessmentsRouter.post(
 );
 
 recruiterAssessmentsRouter.post(
-  "/api/recruiter/assessments/generate",
+  "/generate",
   asyncHandler(async (req, res) => {
     const parsedBody = generationSchema.safeParse(req.body);
     if (!parsedBody.success) {
@@ -244,5 +250,162 @@ recruiterAssessmentsRouter.post(
         aiFallback: draft.aiFallback,
         assembled,
     });
+  }),
+);
+
+// ---------- draft read and edit (4D-1) ----------
+
+recruiterAssessmentsRouter.get(
+  "/:assessmentId/versions/:versionId",
+  asyncHandler(async (req, res) => {
+    const currentUser = res.locals.user;
+    if (!currentUser || currentUser.role !== "RECRUITER") {
+      res.status(403).json({ error: "Recruiter role required" });
+      return;
+    }
+
+    const assessmentId = routeParam(req.params.assessmentId);
+    const versionId = routeParam(req.params.versionId);
+
+    const version = await prisma.assessmentVersion.findFirst({
+      where: {
+        id: versionId,
+        assessmentId,
+        assessment: { ownerId: currentUser.id },
+      },
+      include: {
+        assessment: true,
+        skills: { include: { skill: { include: { subskills: true } } } },
+        tasks: {
+          orderBy: { position: "asc" },
+          include: { skill: true, rubric: { orderBy: { position: "asc" } } },
+        },
+      },
+    });
+
+    if (!version) {
+      res.status(404).json({ error: "Assessment draft not found" });
+      return;
+    }
+
+    res.json(serializeDraft(version));
+  }),
+);
+
+recruiterAssessmentsRouter.patch(
+  "/:assessmentId/versions/:versionId",
+  asyncHandler(async (req, res) => {
+    const currentUser = res.locals.user;
+    if (!currentUser || currentUser.role !== "RECRUITER") {
+      res.status(403).json({ error: "Recruiter role required" });
+      return;
+    }
+
+    const parsedBody = draftUpdateSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      res.status(400).json({ error: "Invalid draft update", details: formatZodIssues(parsedBody.error) });
+      return;
+    }
+
+    const assessmentId = routeParam(req.params.assessmentId);
+    const versionId = routeParam(req.params.versionId);
+
+    const version = await prisma.assessmentVersion.findFirst({
+      where: {
+        id: versionId,
+        assessmentId,
+        assessment: { ownerId: currentUser.id },
+      },
+      include: {
+        assessment: true,
+        skills: { include: { skill: { include: { subskills: true } } } },
+        tasks: {
+          orderBy: { position: "asc" },
+          include: { skill: true, rubric: { orderBy: { position: "asc" } } },
+        },
+      },
+    });
+
+    if (!version) {
+      res.status(404).json({ error: "Assessment draft not found" });
+      return;
+    }
+
+    // Published versions are immutable: attempts and results must keep the criteria they were scored against.
+    if (version.status !== "DRAFT") {
+      res.status(409).json({
+        error: "This version is published and read-only. Create a new version to change it.",
+      });
+      return;
+    }
+
+    let plan;
+    try {
+      plan = planDraftUpdate(version, parsedBody.data);
+    } catch (err) {
+      if (err instanceof DraftValidationError) {
+        res.status(400).json({ error: "Draft update is invalid", details: err.issues });
+        return;
+      }
+      throw err;
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.assessmentVersion.update({
+        where: { id: version.id },
+        data: { ...plan.version },
+      });
+
+      if (plan.skills) {
+        for (const skill of plan.skills) {
+          await tx.assessmentVersionSkill.update({
+            where: { versionId_skillId: { versionId: version.id, skillId: skill.skillId } },
+            data: { weight: skill.weight, selectedSubskills: skill.selectedSubskills },
+          });
+        }
+      }
+
+      if (plan.tasks) {
+        for (const task of plan.tasks) {
+          await tx.assessmentTask.update({
+            where: { id: task.id },
+            data: {
+              title: task.title,
+              prompt: task.prompt,
+              marks: task.marks,
+              timeMinutes: task.timeMinutes,
+              rubric: {
+                deleteMany: {},
+                create: task.rubric.map((criterion, i) => ({ position: i, ...criterion })),
+              },
+            },
+          });
+        }
+      }
+
+      await tx.auditLog.create({
+        data: {
+          actorId: currentUser.id,
+          action: "EDIT_DRAFT",
+          entityType: "AssessmentVersion",
+          entityId: version.id,
+          metadata: JSON.stringify({ assessmentId: version.assessmentId, changed: plan.changed }),
+        },
+      });
+
+      return tx.assessmentVersion.findUniqueOrThrow({
+        where: { id: version.id },
+        include: {
+          assessment: true,
+          skills: { include: { skill: { include: { subskills: true } } } },
+          tasks: {
+            orderBy: { position: "asc" },
+            include: { skill: true, rubric: { orderBy: { position: "asc" } } },
+          },
+        },
+      });
+    });
+
+    res.json(serializeDraft(updated));
   }),
 );
