@@ -13,11 +13,14 @@ import {
   buildSalesChecks,
   describeTrends,
   isAnswerCorrect,
+  generateFootingsDataset,
+  buildFootingChecks,
   type Dataset,
   type DataRow,
   type CheckSpec,
   type DataCheck,
   type DatasetTheme,
+  type TableData,
 } from "./dataTasks.js";
 
 describe("mulberry32", () => {
@@ -307,4 +310,48 @@ describe("describeTrends", () => {
       }
     });
   }
+});
+
+describe("generateFootingsDataset", () => {
+  test("deterministic per seed", () => {
+    const d1 = generateFootingsDataset(42);
+    const d2 = generateFootingsDataset(42);
+    assert.deepEqual(d1, d2);
+  });
+
+  test("different seeds give different datasets", () => {
+    const d1 = generateFootingsDataset(1);
+    const d2 = generateFootingsDataset(2);
+    assert.notDeepEqual(d1, d2);
+  });
+
+  test("has 5 rows F1..F5 with correct columns", () => {
+    const ds = generateFootingsDataset(999);
+    assert.equal(ds.rows.length, 5);
+    assert.deepEqual(ds.columns, ["footing", "length_m", "width_m", "depth_m", "count"]);
+    for (let i = 0; i < 5; i++) {
+      assert.equal(ds.rows[i].footing, `F${i + 1}`);
+    }
+  });
+});
+
+describe("buildFootingChecks", () => {
+  test("fixed data expected values are [14.76, 17, 5.76]", () => {
+    const fixedData: TableData = {
+      columns: ["footing", "length_m", "width_m", "depth_m", "count"],
+      rows: [
+        { footing: "F1", length_m: 2, width_m: 1.5, depth_m: 0.5, count: 4 },
+        { footing: "F2", length_m: 1.2, width_m: 1.2, depth_m: 0.4, count: 10 },
+        { footing: "F3", length_m: 1, width_m: 1, depth_m: 1, count: 1 },
+        { footing: "F4", length_m: 1, width_m: 1, depth_m: 1, count: 1 },
+        { footing: "F5", length_m: 1, width_m: 1, depth_m: 1, count: 1 },
+      ],
+    };
+    const checks = buildFootingChecks(fixedData);
+    assert.equal(checks.length, 3);
+    // total_concrete_volume: 2*1.5*0.5*4 + 1.2*1.2*0.4*10 + 1*1*1*1 + 1*1*1*1 + 1*1*1*1 = 6 + 5.76 + 1 + 1 + 1 = 14.76
+    // total_footings: 4 + 10 + 1 + 1 + 1 = 17
+    // volume_f2: 1.2*1.2*0.4*10 = 5.76
+    assert.deepEqual(checks.map((c) => c.expected), [14.76, 17, 5.76]);
+  });
 });

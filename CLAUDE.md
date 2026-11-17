@@ -20,6 +20,12 @@ Preserve working code. Make the smallest change that does the task.
 - Seed: `npm run db:seed -w server`
 - Migrations: only when a task says so: `cd server` then `npx prisma migrate dev --name <name>`, then `npx prisma generate`
 
+Run only the checks that match what you changed. Do not run the full client+server suite "to be safe".
+- Server-only (`server/`): `npx tsc --noEmit -p server`. If a matching `*.test.ts` exists, run that one file. Skip client build and lint.
+- Client-only (`client/`): `npm run build -w client` and `npm run lint -w client`. Skip server type-check and tests.
+- Both sides, or shared types/API contract: run the server checks and the client checks.
+- Do not start `npm run dev` unless the task asks you to.
+
 ## Code conventions
 - Server imports are extensionless (`from "../db"`). Client uses `import type` for types.
 - Async route handlers are wrapped in `asyncHandler`. Errors return `{ error: string, details?: [...] }`.
@@ -30,8 +36,8 @@ Preserve working code. Make the smallest change that does the task.
 - Private practice evidence must never be returned to recruiters (enforce in server queries, not just the UI).
 
 ## Layout
-- `server/src/`: auth, middleware, routes, skills, assessments, utils; `server/prisma/`: schema, migrations, seed files
-- `client/src/`: components, hooks, layouts, pages, services, types
+- Real source is only `server/src/`, `server/prisma/`, and `client/src/`. Read and edit those paths, never copies.
+- npm workspaces also expose the same files under `node_modules/server/` and `node_modules/client/`. Ignore those.
 
 ## HARD RULES (never break these)
 - NEVER run `git commit`, `git push`, `git reset`, `git clean`, `git checkout .`, `git stash drop` or any history-changing git command. I commit myself.
@@ -41,12 +47,14 @@ Preserve working code. Make the smallest change that does the task.
 - NEVER read, print or edit `.env` files. Never put secrets in code or chat.
 - NEVER delete files or folders. Never rewrite a whole existing file when a small edit works.
 - NEVER add a dependency, rename a table/column, or change the stack without asking me first.
+- NEVER read, search, grep, list, or edit `node_modules/`, `client/dist/`, `**/dist/`, lockfile internals, or any path under `node_modules/server` / `node_modules/client`. If a search hits those, ignore the hit and use `server/src` or `client/src` instead.
 - No fake data, hardcoded scores or non-working buttons. Label template output honestly; never call it AI-generated.
 
 ## How to work
 1. Do exactly ONE task per prompt. Do not start the next task.
-2. Before editing, list the files you will create or change, then proceed.
-3. After editing, run the type-check and build commands above and show the results.
-4. If something fails and you cannot fix it in two attempts, STOP and report the exact error.
-5. If a task needs more than about 8 files, STOP and propose how to split it.
-6. Finish with: files changed, commands run and their results, what is left. Then stop.
+2. Stay in the files the task names. Do not explore the rest of the repo unless a named file is missing or an error points there.
+3. Before editing, list the files you will create or change (real `server/` / `client/` paths only), then proceed.
+4. After editing, run only the scoped checks in Commands. Show the results. Do not rerun passing checks.
+5. If something fails and you cannot fix it in two attempts, STOP and report the exact error.
+6. If a task needs more than about 8 files, STOP and propose how to split it.
+7. Finish with: files changed, commands run and their results, what is left. Then stop.

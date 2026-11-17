@@ -28,6 +28,8 @@ export type DataCheck = {
   marks: number;
 };
 
+export type TableData = { columns: string[]; rows: DataRow[] }; // Dataset must stay assignable to it
+
 /**
  * Standard mulberry32 PRNG returning floats in [0, 1).
  * Same seed always produces the same sequence.
@@ -366,4 +368,114 @@ export function isAnswerCorrect(
 
   const expectedNum = Number(expected);
   return Math.abs(parsed - expectedNum) <= check.tolerance + 1e-9;
+}
+
+/**
+ * Generate a civil footings dataset from a seed.
+ * Deterministic: same seed always gives identical dataset.
+ */
+export function generateFootingsDataset(seed: number): TableData {
+  const rand = mulberry32(seed);
+
+  const lengths = [1.2, 1.5, 1.8, 2.0, 2.4, 2.7];
+  const depths = [0.4, 0.45, 0.5, 0.6];
+
+  const rows: DataRow[] = [];
+
+  for (let i = 0; i < 5; i++) {
+    const footing = `F${i + 1}`;
+    const lengthIdx = Math.floor(rand() * lengths.length);
+    const length_m = lengths[lengthIdx];
+
+    // width_m = length_m, or length_m - 0.3 (random choice)
+    const width_m = rand() < 0.5 ? length_m : Math.round((length_m - 0.3) * 100) / 100;
+
+    const depthIdx = Math.floor(rand() * depths.length);
+    const depth_m = depths[depthIdx];
+
+    // count = integer 2..12
+    const count = Math.floor(2 + rand() * 11);
+
+    rows.push({
+      footing,
+      length_m: Math.round(length_m * 100) / 100,
+      width_m: Math.round(width_m * 100) / 100,
+      depth_m: Math.round(depth_m * 100) / 100,
+      count,
+    });
+  }
+
+  return {
+    columns: ["footing", "length_m", "width_m", "depth_m", "count"],
+    rows,
+  };
+}
+
+/**
+ * Build the 3 footing checks for a dataset.
+ * Expected values are computed from the data (not hardcoded), rounded to 3 decimals.
+ */
+export function buildFootingChecks(data: TableData): { check: DataCheck; expected: number | string }[] {
+  const { rows } = data;
+
+  const checks: { check: DataCheck; expected: number | string }[] = [];
+
+  // 1. total_concrete_volume: sum_product of [length_m, width_m, depth_m, count]
+  const totalVolumeSpec: CheckSpec = {
+    op: "sum_product",
+    columns: ["length_m", "width_m", "depth_m", "count"],
+  };
+  const totalVolumeExpected = Math.round((computeCheck(rows, totalVolumeSpec) as number) * 1000) / 1000;
+  checks.push({
+    check: {
+      id: "total_concrete_volume",
+      label: "Total Concrete Volume",
+      question:
+        "What is the total volume of concrete, in cubic metres, needed for all the footings? Give two decimal places.",
+      spec: totalVolumeSpec,
+      answerType: "NUMBER",
+      tolerance: 0.05,
+      marks: 10,
+    },
+    expected: totalVolumeExpected,
+  });
+
+  // 2. total_footings: sum of count
+  const totalFootingsSpec: CheckSpec = { op: "sum", column: "count" };
+  const totalFootingsExpected = computeCheck(rows, totalFootingsSpec);
+  checks.push({
+    check: {
+      id: "total_footings",
+      label: "Total Footings",
+      question: "How many footings are there in total?",
+      spec: totalFootingsSpec,
+      answerType: "NUMBER",
+      tolerance: 0,
+      marks: 10,
+    },
+    expected: totalFootingsExpected,
+  });
+
+  // 3. volume_f2: sum_product of same columns where footing equals "F2"
+  const volumeF2Spec: CheckSpec = {
+    op: "sum_product",
+    columns: ["length_m", "width_m", "depth_m", "count"],
+    where: [{ column: "footing", equals: "F2" }],
+  };
+  const volumeF2Expected = Math.round((computeCheck(rows, volumeF2Spec) as number) * 1000) / 1000;
+  checks.push({
+    check: {
+      id: "volume_f2",
+      label: "Volume F2",
+      question:
+        "What is the total concrete volume, in cubic metres, for footing type F2 only (all F2 footings together)?",
+      spec: volumeF2Spec,
+      answerType: "NUMBER",
+      tolerance: 0.05,
+      marks: 10,
+    },
+    expected: volumeF2Expected,
+  });
+
+  return checks;
 }
