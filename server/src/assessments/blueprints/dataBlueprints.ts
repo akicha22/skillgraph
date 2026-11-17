@@ -66,19 +66,21 @@ export function buildSalesAnalysisTask({
   // Get declining product for rubric private guidance
   const { decliningProduct } = describeTrends(dataset);
 
-  // Build rubric criteria (4 checks = 4 criteria, equal marks)
-  const marksPerCheck = Math.floor(marks / checks.length);
-  const remainder = marks % checks.length;
-
-  const rubric: BlueprintCriterion[] = checksWithExpected.map(({ check, expected }, index) => {
-    const criterionMarks = marksPerCheck + (index < remainder ? 1 : 0);
-    return {
+  // Build rubric criteria: 10 marks per check + 20 for overall analysis
+  const rubric: BlueprintCriterion[] = [
+    ...checksWithExpected.map(({ check, expected }) => ({
       name: check.label,
       description: `Correctly answer: ${check.question}`,
-      maxMarks: criterionMarks,
+      maxMarks: 10,
       privateGuidance: `Expected answer: ${check.answerType === "NUMBER" ? expectedToString(expected) : expected}. For ${check.id}: ${getPrivateGuidance(check.id, decliningProduct, difficulty)}`,
-    };
-  });
+    })),
+    {
+      name: "Overall analysis and presentation",
+      description: "Answers are clearly presented with workings shown.",
+      maxMarks: 20,
+      privateGuidance: "Strong answers show clear workings, label all steps, and present final answers prominently. Weak answers give only final numbers with no working, or have disorganised calculations.",
+    },
+  ];
 
   // Build prompt with scenario and instructions
   const scenario = aiContent?.scenario ?? defaultSalesScenario(theme);
@@ -102,6 +104,8 @@ export function buildSalesAnalysisTask({
       rubric,
     },
     rubric,
+    isGeneric: false,
+    timeWeight: 2,
   };
 }
 
@@ -131,19 +135,21 @@ export function buildQuantityEstimationTask({
     answerKey[check.id] = expected;
   }
 
-  // Build rubric criteria (3 checks = 3 criteria, equal marks)
-  const marksPerCheck = Math.floor(marks / checks.length);
-  const remainder = marks % checks.length;
-
-  const rubric: BlueprintCriterion[] = checksWithExpected.map(({ check }, index) => {
-    const criterionMarks = marksPerCheck + (index < remainder ? 1 : 0);
-    return {
+  // Build rubric criteria: 10 marks per check + 20 for overall analysis
+  const rubric: BlueprintCriterion[] = [
+    ...checksWithExpected.map(({ check, expected }) => ({
       name: check.label,
       description: `Correctly answer: ${check.question}`,
-      maxMarks: criterionMarks,
-      privateGuidance: `Expected answer: ${expectedToString(check.answerType === "NUMBER" ? answerKey[check.id] : answerKey[check.id])}. For ${check.id}: ${getFootingPrivateGuidance(check.id, difficulty)}`,
-    };
-  });
+      maxMarks: 10,
+      privateGuidance: `Expected answer: ${expectedToString(check.answerType === "NUMBER" ? expected : expected)}. For ${check.id}: ${getFootingPrivateGuidance(check.id, difficulty)}`,
+    })),
+    {
+      name: "Overall calculation and presentation",
+      description: "Calculations are clearly shown with correct units and rounding.",
+      maxMarks: 20,
+      privateGuidance: "Strong answers show all steps (volume = L × W × D × count), use correct units (m³), and round as specified. Weak answers skip steps, use wrong units, or have arithmetic errors.",
+    },
+  ];
 
   // Build prompt with scenario and instructions
   const scenario = aiContent?.scenario ?? defaultFootingsScenario();
@@ -167,6 +173,8 @@ export function buildQuantityEstimationTask({
       rubric,
     },
     rubric,
+    isGeneric: false,
+    timeWeight: 2,
   };
 }
 

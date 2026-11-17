@@ -11,7 +11,7 @@ import {
   buildSalesAnalysisTask,
   buildQuantityEstimationTask,
 } from "./dataBlueprints.js";
-import type { BlueprintContext } from "./types.js";
+import type { BlueprintContext, DataTaskBlueprint, BlueprintCriterion } from "./types.js";
 import type { DatasetTheme, DataCheck, TableData } from "../dataTasks.js";
 
 describe("pickTheme", () => {
@@ -51,18 +51,22 @@ describe("buildSalesAnalysisTask", () => {
     difficulty: "INTERMEDIATE",
   };
 
+  // For data tasks, rubric sum = 10*n+20 where n = number of checks (4)
+  // So rubric has 5 criteria (4 checks + 1 overall) summing to 60
+  const DATA_TASK_MARKS = 60; // 10*4+20
+
   test("returns complete BlueprintTask with correct structure", () => {
     const task = buildSalesAnalysisTask({
       context: baseContext,
       targetSkillSlug: "data-analysis",
-      marks: 40,
+      marks: DATA_TASK_MARKS,
       timeMinutes: 30,
     });
 
     // Core structure
     assert.equal(task.type, "DATA_TASK");
     assert.equal(task.skillSlug, "data-analysis");
-    assert.equal(task.marks, 40);
+    assert.equal(task.marks, DATA_TASK_MARKS);
     assert.equal(task.timeMinutes, 30);
     assert.ok(task.title.includes("Sales Analysis"));
     assert.ok(task.prompt.length > 100);
@@ -72,10 +76,11 @@ describe("buildSalesAnalysisTask", () => {
     const task = buildSalesAnalysisTask({
       context: baseContext,
       targetSkillSlug: "data-analysis",
-      marks: 40,
+      marks: DATA_TASK_MARKS,
       timeMinutes: 30,
     });
 
+    if (task.type !== "DATA_TASK") throw new Error("Expected DATA_TASK");
     const { table, checks } = task.publicData;
     assert.equal(table.rows.length, 24);
     assert.deepEqual(table.columns, ["month", "product", "units", "revenue"]);
@@ -87,13 +92,14 @@ describe("buildSalesAnalysisTask", () => {
     const task = buildSalesAnalysisTask({
       context: baseContext,
       targetSkillSlug: "data-analysis",
-      marks: 40,
+      marks: DATA_TASK_MARKS,
       timeMinutes: 30,
     });
 
+    if (task.type !== "DATA_TASK") throw new Error("Expected DATA_TASK");
     const { checks } = task.publicData;
     assert.equal(checks.length, 4);
-    const ids = checks.map((c) => c.id).sort();
+    const ids = checks.map((c: DataCheck) => c.id).sort();
     assert.deepEqual(ids, ["avg_units_first_product", "growth_pct", "top_product", "total_revenue"]);
   });
 
@@ -101,15 +107,16 @@ describe("buildSalesAnalysisTask", () => {
     const task = buildSalesAnalysisTask({
       context: baseContext,
       targetSkillSlug: "data-analysis",
-      marks: 40,
+      marks: DATA_TASK_MARKS,
       timeMinutes: 30,
     });
 
+    if (task.type !== "DATA_TASK") throw new Error("Expected DATA_TASK");
     const { checks } = task.publicData;
-    const totalRevenue = checks.find((c) => c.id === "total_revenue")!;
-    const topProduct = checks.find((c) => c.id === "top_product")!;
-    const growthPct = checks.find((c) => c.id === "growth_pct")!;
-    const avgUnits = checks.find((c) => c.id === "avg_units_first_product")!;
+    const totalRevenue = checks.find((c: DataCheck) => c.id === "total_revenue")!;
+    const topProduct = checks.find((c: DataCheck) => c.id === "top_product")!;
+    const growthPct = checks.find((c: DataCheck) => c.id === "growth_pct")!;
+    const avgUnits = checks.find((c: DataCheck) => c.id === "avg_units_first_product")!;
 
     assert.equal(totalRevenue.answerType, "NUMBER");
     assert.equal(totalRevenue.tolerance, 0);
@@ -125,12 +132,13 @@ describe("buildSalesAnalysisTask", () => {
     const task = buildSalesAnalysisTask({
       context: baseContext,
       targetSkillSlug: "data-analysis",
-      marks: 40,
+      marks: DATA_TASK_MARKS,
       timeMinutes: 30,
     });
 
+    if (task.type !== "DATA_TASK") throw new Error("Expected DATA_TASK");
     const { table, checks } = task.publicData;
-    const { answerKey } = task.privateData;
+    const { answerKey } = task.privateData as DataTaskBlueprint["privateData"];
 
     for (const check of checks) {
       const expected = answerKey[check.id];
@@ -143,20 +151,21 @@ describe("buildSalesAnalysisTask", () => {
     }
   });
 
-  test("privateData.rubric has 4 criteria matching checks", () => {
+  test("privateData.rubric has 5 criteria (4 checks + 1 overall)", () => {
     const task = buildSalesAnalysisTask({
       context: baseContext,
       targetSkillSlug: "data-analysis",
-      marks: 40,
+      marks: DATA_TASK_MARKS,
       timeMinutes: 30,
     });
 
-    const { rubric } = task.privateData;
-    assert.equal(rubric.length, 4);
+    if (task.type !== "DATA_TASK") throw new Error("Expected DATA_TASK");
+    const { rubric } = task.privateData as DataTaskBlueprint["privateData"];
+    assert.equal(rubric.length, 5); // 4 checks + 1 overall
 
-    // Check marks sum to task marks
-    const marksSum = rubric.reduce((sum, r) => sum + r.maxMarks, 0);
-    assert.equal(marksSum, 40);
+    // Check marks sum to 10*n+20 = 60
+    const marksSum = rubric.reduce((sum: number, r: BlueprintCriterion) => sum + r.maxMarks, 0);
+    assert.equal(marksSum, DATA_TASK_MARKS);
 
     // Each criterion has required fields
     for (const criterion of rubric) {
@@ -167,32 +176,34 @@ describe("buildSalesAnalysisTask", () => {
     }
   });
 
-  test("rubric marks distributed evenly (10 each for 40 marks)", () => {
+  test("rubric marks: 10 per check (4 checks) + 20 overall = 60", () => {
     const task = buildSalesAnalysisTask({
       context: baseContext,
       targetSkillSlug: "data-analysis",
-      marks: 40,
+      marks: DATA_TASK_MARKS,
       timeMinutes: 30,
     });
 
-    const { rubric } = task.privateData;
-    for (const criterion of rubric) {
-      assert.equal(criterion.maxMarks, 10);
-    }
+    if (task.type !== "DATA_TASK") throw new Error("Expected DATA_TASK");
+    const { rubric } = task.privateData as DataTaskBlueprint["privateData"];
+    const marks = rubric.map((r: BlueprintCriterion) => r.maxMarks).sort();
+    // 4 checks at 10 each, 1 overall at 20
+    assert.deepEqual(marks, [10, 10, 10, 10, 20]);
   });
 
-  test("rubric marks distributed with remainder for 41 marks", () => {
+  test("rubric marks sum follows 10*n+20 formula for 41 marks input (ignored, uses formula)", () => {
     const task = buildSalesAnalysisTask({
       context: baseContext,
       targetSkillSlug: "data-analysis",
-      marks: 41,
+      marks: 41, // This is ignored for data tasks; formula 10*4+20=60 applies
       timeMinutes: 30,
     });
 
-    const { rubric } = task.privateData;
-    const marks = rubric.map((r) => r.maxMarks).sort();
-    // 41 / 4 = 10 remainder 1, so one gets 11, three get 10
-    assert.deepEqual(marks, [10, 10, 10, 11]);
+    if (task.type !== "DATA_TASK") throw new Error("Expected DATA_TASK");
+    const { rubric } = task.privateData as DataTaskBlueprint["privateData"];
+    const marks = rubric.map((r: BlueprintCriterion) => r.maxMarks).sort();
+    // Formula 10*n+20 applies regardless of input marks
+    assert.deepEqual(marks, [10, 10, 10, 10, 20]);
   });
 
   test("different seeds produce different tasks", () => {
@@ -210,8 +221,12 @@ describe("buildSalesAnalysisTask", () => {
       timeMinutes: 30,
     });
 
+    if (task1.type !== "DATA_TASK" || task2.type !== "DATA_TASK") throw new Error("Expected DATA_TASK");
     assert.notDeepEqual(task1.publicData.table, task2.publicData.table);
-    assert.notDeepEqual(task1.privateData.answerKey, task2.privateData.answerKey);
+    assert.notDeepEqual(
+      (task1.privateData as DataTaskBlueprint["privateData"]).answerKey,
+      (task2.privateData as DataTaskBlueprint["privateData"]).answerKey
+    );
   });
 
   test("different themes produce different products", () => {
@@ -229,6 +244,7 @@ describe("buildSalesAnalysisTask", () => {
       timeMinutes: 30,
     });
 
+    if (retailTask.type !== "DATA_TASK" || buildingTask.type !== "DATA_TASK") throw new Error("Expected DATA_TASK");
     const retailProducts = [...new Set(retailTask.publicData.table.rows.map((r) => r.product))];
     const buildingProducts = [...new Set(buildingTask.publicData.table.rows.map((r) => r.product))];
 
@@ -271,8 +287,9 @@ describe("buildSalesAnalysisTask", () => {
       timeMinutes: 30,
     });
 
-    const beginnerGuidance = beginnerTask.privateData.rubric[0].privateGuidance;
-    const advancedGuidance = advancedTask.privateData.rubric[0].privateGuidance;
+    if (beginnerTask.type !== "DATA_TASK" || advancedTask.type !== "DATA_TASK") throw new Error("Expected DATA_TASK");
+    const beginnerGuidance = (beginnerTask.privateData as DataTaskBlueprint["privateData"]).rubric[0].privateGuidance;
+    const advancedGuidance = (advancedTask.privateData as DataTaskBlueprint["privateData"]).rubric[0].privateGuidance;
 
     assert.ok(beginnerGuidance.includes("Allow generous tolerance"));
     assert.ok(advancedGuidance.includes("Expect exact calculation"));
@@ -310,6 +327,7 @@ describe("buildQuantityEstimationTask", () => {
       timeMinutes: 25,
     });
 
+    if (task.type !== "DATA_TASK") throw new Error("Expected DATA_TASK");
     const { table, checks } = task.publicData;
     assert.equal(table.rows.length, 5);
     assert.deepEqual(table.columns, ["footing", "length_m", "width_m", "depth_m", "count"]);
@@ -328,9 +346,10 @@ describe("buildQuantityEstimationTask", () => {
       timeMinutes: 25,
     });
 
+    if (task.type !== "DATA_TASK") throw new Error("Expected DATA_TASK");
     const { checks } = task.publicData;
     assert.equal(checks.length, 3);
-    const ids = checks.map((c) => c.id).sort();
+    const ids = checks.map((c: DataCheck) => c.id).sort();
     assert.deepEqual(ids, ["total_concrete_volume", "total_footings", "volume_f2"]);
   });
 
@@ -342,10 +361,11 @@ describe("buildQuantityEstimationTask", () => {
       timeMinutes: 25,
     });
 
+    if (task.type !== "DATA_TASK") throw new Error("Expected DATA_TASK");
     const { checks } = task.publicData;
-    const totalVolume = checks.find((c) => c.id === "total_concrete_volume")!;
-    const totalFootings = checks.find((c) => c.id === "total_footings")!;
-    const volumeF2 = checks.find((c) => c.id === "volume_f2")!;
+    const totalVolume = checks.find((c: DataCheck) => c.id === "total_concrete_volume")!;
+    const totalFootings = checks.find((c: DataCheck) => c.id === "total_footings")!;
+    const volumeF2 = checks.find((c: DataCheck) => c.id === "volume_f2")!;
 
     assert.equal(totalVolume.answerType, "NUMBER");
     assert.equal(totalVolume.tolerance, 0.05);
@@ -363,7 +383,8 @@ describe("buildQuantityEstimationTask", () => {
       timeMinutes: 25,
     });
 
-    const { answerKey } = task.privateData;
+    if (task.type !== "DATA_TASK") throw new Error("Expected DATA_TASK");
+    const { answerKey } = task.privateData as DataTaskBlueprint["privateData"];
     assert.ok("total_concrete_volume" in answerKey);
     assert.ok("total_footings" in answerKey);
     assert.ok("volume_f2" in answerKey);
@@ -382,11 +403,12 @@ describe("buildQuantityEstimationTask", () => {
       timeMinutes: 25,
     });
 
-    const { rubric } = task.privateData;
-    assert.equal(rubric.length, 3);
+    if (task.type !== "DATA_TASK") throw new Error("Expected DATA_TASK");
+    const { rubric } = task.privateData as DataTaskBlueprint["privateData"];
+    assert.equal(rubric.length, 4);
 
-    const marksSum = rubric.reduce((sum, r) => sum + r.maxMarks, 0);
-    assert.equal(marksSum, 30);
+    const marksSum = rubric.reduce((sum: number, r: BlueprintCriterion) => sum + r.maxMarks, 0);
+    assert.equal(marksSum, 50);
 
     for (const criterion of rubric) {
       assert.ok(criterion.name.length > 0);
@@ -404,10 +426,11 @@ describe("buildQuantityEstimationTask", () => {
       timeMinutes: 25,
     });
 
-    const { rubric } = task.privateData;
-    for (const criterion of rubric) {
-      assert.equal(criterion.maxMarks, 10);
-    }
+    if (task.type !== "DATA_TASK") throw new Error("Expected DATA_TASK");
+    const { rubric } = task.privateData as DataTaskBlueprint["privateData"];
+    const marks = rubric.map((r: BlueprintCriterion) => r.maxMarks).sort();
+    // 3 checks at 10 each, 1 overall at 20
+    assert.deepEqual(marks, [10, 10, 10, 20]);
   });
 
   test("rubric marks distributed with remainder for 31 marks", () => {
@@ -418,10 +441,11 @@ describe("buildQuantityEstimationTask", () => {
       timeMinutes: 25,
     });
 
-    const { rubric } = task.privateData;
-    const marks = rubric.map((r) => r.maxMarks).sort();
+    if (task.type !== "DATA_TASK") throw new Error("Expected DATA_TASK");
+    const { rubric } = task.privateData as DataTaskBlueprint["privateData"];
+    const marks = rubric.map((r: BlueprintCriterion) => r.maxMarks).sort();
     // 31 / 3 = 10 remainder 1, so one gets 11, two get 10
-    assert.deepEqual(marks, [10, 10, 11]);
+    assert.deepEqual(marks, [10, 10, 10, 20]);
   });
 
   test("different seeds produce different tasks", () => {
@@ -439,8 +463,12 @@ describe("buildQuantityEstimationTask", () => {
       timeMinutes: 25,
     });
 
+    if (task1.type !== "DATA_TASK" || task2.type !== "DATA_TASK") throw new Error("Expected DATA_TASK");
     assert.notDeepEqual(task1.publicData.table, task2.publicData.table);
-    assert.notDeepEqual(task1.privateData.answerKey, task2.privateData.answerKey);
+    assert.notDeepEqual(
+      (task1.privateData as DataTaskBlueprint["privateData"]).answerKey,
+      (task2.privateData as DataTaskBlueprint["privateData"]).answerKey
+    );
   });
 
   test("AI content overrides default scenario and instructions", () => {
@@ -478,8 +506,9 @@ describe("buildQuantityEstimationTask", () => {
       timeMinutes: 25,
     });
 
-    const beginnerGuidance = beginnerTask.privateData.rubric[0].privateGuidance;
-    const advancedGuidance = advancedTask.privateData.rubric[0].privateGuidance;
+    if (beginnerTask.type !== "DATA_TASK" || advancedTask.type !== "DATA_TASK") throw new Error("Expected DATA_TASK");
+    const beginnerGuidance = (beginnerTask.privateData as DataTaskBlueprint["privateData"]).rubric[0].privateGuidance;
+    const advancedGuidance = (advancedTask.privateData as DataTaskBlueprint["privateData"]).rubric[0].privateGuidance;
 
     assert.ok(beginnerGuidance.includes("Allow tolerance"));
     assert.ok(advancedGuidance.includes("Expect exact calculation"));
@@ -510,11 +539,12 @@ describe("Integration: sales analysis + quantity estimation", () => {
       assert.ok(task.prompt.length > 0);
       assert.ok(task.marks > 0);
       assert.ok(task.timeMinutes > 0);
+      if (task.type !== "DATA_TASK") throw new Error("Expected DATA_TASK");
       assert.ok(task.publicData.table.rows.length > 0);
       assert.ok(task.publicData.checks.length > 0);
-      assert.ok(Object.keys(task.privateData.answerKey).length > 0);
-      assert.equal(task.privateData.rubric.length, task.publicData.checks.length);
-      assert.equal(task.rubric.length, task.publicData.checks.length);
+      assert.ok(Object.keys((task.privateData as DataTaskBlueprint["privateData"]).answerKey).length > 0);
+      assert.equal((task.privateData as DataTaskBlueprint["privateData"]).rubric.length, task.publicData.checks.length + 1);
+      assert.equal(task.rubric.length, task.publicData.checks.length + 1);
     }
   });
 
