@@ -6,7 +6,7 @@ import { parseRequirements, warnOnUnknownSlugs } from "../assessments/requiremen
 import type { Level, Difficulty } from "../assessments/constants";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { asyncHandler } from "../utils/asyncHandler";
-import { generationSchema } from "../assessments/generationSchema";
+import { generationSchemaWithRefinements } from "../assessments/generationSchema";
 import { generateAssessmentDraft } from "../ai";
 import {
   buildVersionCopy,
@@ -58,7 +58,7 @@ recruiterAssessmentsRouter.post(
 recruiterAssessmentsRouter.post(
   "/generate",
   asyncHandler(async (req, res) => {
-    const parsedBody = generationSchema.safeParse(req.body);
+    const parsedBody = generationSchemaWithRefinements.safeParse(req.body);
     if (!parsedBody.success) {
         res.status(400).json({ error: "Invalid request", details: formatZodIssues(parsedBody.error) });
         return;

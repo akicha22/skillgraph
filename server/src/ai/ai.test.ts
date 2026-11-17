@@ -273,6 +273,10 @@ describe("Gemini adapter", () => {
     };
     assert.equal(body.systemInstruction.parts[0].text, "system");
     assert.equal(body.generationConfig.responseMimeType, "application/json");
+    // Gemini 3.8 rejects sampling controls in the generation config.
+    assert.equal("temperature" in body.generationConfig, false);
+    assert.equal("topP" in body.generationConfig, false);
+    assert.equal("topK" in body.generationConfig, false);
   });
 
   it("strips a models/ prefix from the configured model", () => {

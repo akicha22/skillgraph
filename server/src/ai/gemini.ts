@@ -12,7 +12,6 @@ export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 const MAX_OUTPUT_TOKENS = 4096;
-const TEMPERATURE = 0.7;
 
 export type GeminiProviderOptions = {
   apiKey: string;
@@ -88,8 +87,8 @@ export function createGeminiProvider(options: GeminiProviderOptions): AiProvider
             contents: [{ role: "user", parts: [{ text: input.user }] }],
             generationConfig: {
               // JSON mode only: responseSchema is deprecated, so output is validated with Zod instead.
+              // No temperature/top_p/top_k: Gemini 3.8 generation configs must omit sampling controls.
               responseMimeType: "application/json",
-              temperature: TEMPERATURE,
               maxOutputTokens: MAX_OUTPUT_TOKENS,
             },
           }),

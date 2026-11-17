@@ -139,6 +139,31 @@ describe("Assessment Assembler", () => {
     );
   });
 
+  it("builds each task from its own seed and stays reproducible", async () => {
+    const config = {
+      ...baseConfig,
+      requirementsText: "Test Excel skill with two tasks for this role.",
+      targetSkills: [{ skillSlug: "excel", weight: 100, subskills: [], source: "REQUESTED" as const }],
+      taskCount: 2,
+      seed: 987654,
+    };
+
+    const first = await assembleAssessment(config, mockPrisma());
+    const second = await assembleAssessment(config, mockPrisma());
+
+    assert.equal(first.tasks.length, 2);
+    // Seeded builders must actually run per task, not be cloned from one blueprint:
+    // the datasets differ while the coded instruction text is shared.
+    assert.notDeepEqual(first.tasks[0].publicData, first.tasks[1].publicData);
+    assert.notDeepEqual(first.tasks[0].privateData, first.tasks[1].privateData);
+    assert.ok(!first.tasks[0].prompt.includes("null"));
+    assert.ok(!first.tasks[1].prompt.includes("undefined"));
+    assert.deepEqual(first.tasks[0].title, "Sales Analysis — Retail — task 1");
+    assert.deepEqual(first.tasks[1].title, "Sales Analysis — Retail — task 2");
+    // Same configuration and seed still produce the identical assessment.
+    assert.deepEqual(first, second);
+  });
+
   it("preserves private data and answer keys", async () => {
     const result = await assembleAssessment(
       {

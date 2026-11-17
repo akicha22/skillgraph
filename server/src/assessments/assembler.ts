@@ -1,6 +1,6 @@
 // assembler.ts
 import type { BlueprintContext, BlueprintTask, AssessmentType } from "./blueprints/types.js";
-import { buildTaskForSkill, buildGenericTask, hasSpecificBlueprint, getSpecificBuilder } from "./blueprints/index.js";
+import { buildGenericTask, getSpecificBuilder } from "./blueprints/index.js";
 import { ASSESSMENT_TYPES } from "../skills/assessmentTypes.js";
 import { Level, Difficulty } from "./constants.js";
 import type { DraftWording, GeneratedAssessment } from "./schema.js";
@@ -91,6 +91,17 @@ function convertAssessmentType(type: string): string {
 
 const MAX_PROMPT_LENGTH = 4000;
 
+// Builds one task for a skill: the registered blueprint when it matches the requested
+// assessment type, otherwise the generic builder for that type.
+function buildTaskOfType(ctx: BlueprintContext, desiredType: AssessmentType): BlueprintTask {
+  const builder = getSpecificBuilder(ctx.skillSlug ?? "");
+  if (builder) {
+    const specific = builder(ctx);
+    if (specific.type === desiredType) return specific;
+  }
+  return buildGenericTask({ ...ctx, skill: { ...ctx.skill, assessmentTypes: [desiredType] } });
+}
+
 // Applies wording overrides to a task. The coded prompt (and therefore every fact it
 // carries) is kept; only the title and a short framing paragraph can change.
 function applyTaskWording(task: BlueprintTask, wording: { title?: string; brief: string }): void {
@@ -157,12 +168,20 @@ export async function assembleAssessment(
 
   // 4. Build blueprint context
   const seed = config.seed ?? Date.now();
+  // Never leave "undefined"/"null" in candidate-facing text when the role or description is absent.
+  const role = finalConfig.jobTitle?.trim();
+  const scenarioText = [
+    role ? `${role} at ${finalConfig.companyName}.` : `${finalConfig.companyName}.`,
+    finalConfig.description?.trim() ?? "",
+  ]
+    .filter((part) => part.length > 0)
+    .join(" ");
   const ctx: BlueprintContext = {
     seed,
     theme: "retail",
     difficulty: finalConfig.difficulty,
     aiContent: {
-      scenario: `${finalConfig.jobTitle} at ${finalConfig.companyName}. ${finalConfig.description || ""}`,
+      scenario: scenarioText,
       instructions: "Complete the tasks below to demonstrate your skills.",
     },
     jobTitle: finalConfig.jobTitle ?? undefined,
@@ -202,31 +221,15 @@ export async function assembleAssessment(
     };
     const desiredType = skillTypes[skillConfig.skillSlug];
 
-    // Try specific blueprint first if available
-    let builderTask: BlueprintTask | null = null;
-    if (hasSpecificBlueprint(skill.slug)) {
-      const builder = getSpecificBuilder(skill.slug);
-      if (builder) builderTask = builder(skillCtx);
-    }
-    // If specific blueprint doesn't match desired type or unavailable, use generic
-    if (!builderTask || builderTask.type !== desiredType) {
-      skillCtx.skill = { ...skillCtx.skill, assessmentTypes: [desiredType] };
-      builderTask = buildGenericTask(skillCtx);
-    }
-    // Generate multiple tasks for this skill with different seeds
+    // Each task is built with its own seed, so seeded builders (datasets, scenario pools)
+    // produce distinct, reproducible tasks instead of clones of one blueprint.
     for (let t = 0; t < count; t++) {
-      const taskSeed = seed + i * 100 + t;
-      const taskClone = JSON.parse(JSON.stringify(builderTask)) as BlueprintTask;
-      taskClone.publicData = { ...taskClone.publicData };
-      taskClone.privateData = { ...taskClone.privateData };
-      const taskCtx = { ...skillCtx, seed: taskSeed };
-      if (count > 1 && taskClone.title?.includes(":")) {
-        const base = taskClone.title.split(":")[0];
-        taskClone.title = `${base}: task ${t + 1}`;
-      }
+      const taskCtx: BlueprintContext = { ...skillCtx, seed: seed + i * 100 + t };
+      const task = buildTaskOfType(taskCtx, desiredType);
+      if (count > 1) task.title = `${task.title} — task ${t + 1}`;
       const wording = config.aiWording?.tasks.find((w) => w.skillSlug === skillConfig.skillSlug);
-      if (wording) applyTaskWording(taskClone, wording);
-      tasks.push(taskClone);
+      if (wording) applyTaskWording(task, wording);
+      tasks.push(task);
     }
   }
 
