@@ -7,6 +7,8 @@ import Register from "./pages/Register";
 import CandidateDashboard from "./pages/CandidateDashboard";
 import RecruiterDashboard from "./pages/RecruiterDashboard";
 import MySkills from "./pages/MySkills";
+import AssessmentWizard from "./components/AssessmentWizard";
+import AssessmentDraft from "./pages/AssessmentDraft";
 
 export default function App() {
   return (
@@ -38,6 +40,22 @@ export default function App() {
             element={
               <ProtectedRoute role="RECRUITER">
                 <RecruiterDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recruiter/assessments/new"
+            element={
+              <ProtectedRoute role="RECRUITER">
+                <AssessmentWizard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recruiter/assessments/:assessmentId/versions/:versionId"
+            element={
+              <ProtectedRoute role="RECRUITER">
+                <AssessmentDraft />
               </ProtectedRoute>
             }
           />
