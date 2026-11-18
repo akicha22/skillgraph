@@ -38,6 +38,54 @@ const parseSchema = z.object({
     .max(3000, "Please keep the description under 3000 characters"),
 });
 
+// The recruiter's own assessments, newest activity first, so a draft can be found again.
+recruiterAssessmentsRouter.get(
+  "/",
+  asyncHandler(async (_req, res) => {
+    const currentUser = res.locals.user;
+    if (!currentUser || currentUser.role !== "RECRUITER") {
+      res.status(403).json({ error: "Recruiter role required" });
+      return;
+    }
+
+    const assessments = await prisma.assessment.findMany({
+      where: { ownerId: currentUser.id },
+      orderBy: { updatedAt: "desc" },
+      include: {
+        versions: {
+          orderBy: { versionNumber: "asc" },
+          include: { _count: { select: { tasks: true } } },
+        },
+      },
+    });
+
+    // Every assessment is created with a first version; flatMap skips any that somehow has none.
+    res.json({
+      assessments: assessments.flatMap((assessment) => {
+        const latest = assessment.versions[assessment.versions.length - 1];
+        if (!latest) return [];
+        return [
+          {
+            id: assessment.id,
+            jobTitle: assessment.jobTitle,
+            companyName: assessment.companyName,
+            versionCount: assessment.versions.length,
+            latestVersion: {
+              id: latest.id,
+              versionNumber: latest.versionNumber,
+              status: latest.status,
+              title: latest.title,
+              durationMinutes: latest.durationMinutes,
+              taskCount: latest._count.tasks,
+              updatedAt: latest.updatedAt,
+            },
+          },
+        ];
+      }),
+    });
+  }),
+);
+
 recruiterAssessmentsRouter.post(
   "/parse-requirements",
   asyncHandler(async (req, res) => {

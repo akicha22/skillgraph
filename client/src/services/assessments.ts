@@ -1,5 +1,6 @@
 import { api } from "./api";
 import type {
+  AssessmentList,
   DraftUpdateRequest,
   DraftVersion,
   GenerateRequest,
@@ -9,6 +10,11 @@ import type {
 } from "../types/assessments";
 
 const BASE = "/recruiter/assessments";
+
+/** The recruiter's own assessments, each with its latest version. */
+export function listAssessments() {
+  return api.get<AssessmentList>(BASE);
+}
 
 /** Reads the skills, level, duration and task count implied by the recruiter's brief. */
 export function parseRequirements(text: string) {

@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Eye, FileText, GitBranch, Lock, Pencil, Send } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ChevronRight, Eye, FileText, GitBranch, Lock, Pencil, Send } from "lucide-react";
 import DashboardLayout from "../layouts/DashboardLayout";
 import DraftEditForm from "../components/DraftEditForm";
 import { createNewVersion, getDraft, listVersions, publishVersion } from "../services/assessments";
@@ -31,28 +31,47 @@ function StatusBadge({ children, tone }: { children: string; tone: "draft" | "pu
   return <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${classes}`}>{children}</span>;
 }
 
-/** Renders the task's public dataset as a table when it is one, JSON otherwise. */
+/** A collapsed panel for candidate data and recruiter-only material. */
+function Disclosure({ label, icon, children }: { label: string; icon: ReactNode; children: ReactNode }) {
+  return (
+    <details className="group rounded-xl border border-slate-200 bg-slate-50">
+      <summary className="flex cursor-pointer list-none items-center gap-2 p-3 text-xs font-semibold uppercase tracking-wide text-slate-600">
+        <ChevronRight
+          className="h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform group-open:rotate-90"
+          aria-hidden
+        />
+        {icon}
+        {label}
+      </summary>
+      <div className="px-3 pb-3">{children}</div>
+    </details>
+  );
+}
+
+/** Templates store datasets as `{ table: { columns, rows } }`; anything else is shown as JSON. */
 function DataPreview({ data }: { data: Record<string, unknown> }) {
-  const rows = Array.isArray(data.table) ? (data.table as Record<string, unknown>[]) : null;
-  if (rows && rows.length > 0 && typeof rows[0] === "object" && rows[0] !== null) {
-    const columns = Object.keys(rows[0]);
+  const table = data.table as { columns?: unknown; rows?: unknown } | undefined;
+  const columns = Array.isArray(table?.columns) ? table.columns.map(String) : null;
+  const rows = Array.isArray(table?.rows) ? (table.rows as Record<string, unknown>[]) : null;
+
+  if (columns && rows && rows.length > 0) {
     return (
-      <div className="overflow-x-auto rounded-lg border border-slate-200">
+      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               {columns.map((column) => (
-                <th key={column} scope="col" className="px-3 py-2 whitespace-nowrap">
+                <th key={column} scope="col" className="whitespace-nowrap px-3 py-2">
                   {column}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {rows.map((row, i) => (
-              <tr key={i}>
+            {rows.map((row, index) => (
+              <tr key={index}>
                 {columns.map((column) => (
-                  <td key={column} className="px-3 py-2 text-slate-700 whitespace-nowrap">
+                  <td key={column} className="whitespace-nowrap px-3 py-2 text-slate-700">
                     {String(row[column] ?? "")}
                   </td>
                 ))}
@@ -63,6 +82,7 @@ function DataPreview({ data }: { data: Record<string, unknown> }) {
       </div>
     );
   }
+
   return (
     <pre className="overflow-x-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100">
       {JSON.stringify(data, null, 2)}
@@ -70,80 +90,88 @@ function DataPreview({ data }: { data: Record<string, unknown> }) {
   );
 }
 
+/** Collapsed by default so a long assessment stays a short list until a task is opened. */
 function TaskCard({ task }: { task: DraftTask }) {
   const hasPublicData = Object.keys(task.publicData).length > 0;
   return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-5">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="font-semibold text-slate-900">
-            {task.position + 1}. {task.title}
-          </h3>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span className="rounded-full bg-slate-100 px-2 py-0.5">{TYPE_LABELS[task.type] ?? task.type}</span>
-            <span>{task.skillName}</span>
-            <span>·</span>
-            <span>{task.marks} marks</span>
-            <span>·</span>
-            <span>{task.timeMinutes} min</span>
+    <details className="group rounded-2xl border border-slate-200 bg-white">
+      <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 p-5 hover:bg-slate-50">
+        <div className="flex items-start gap-2">
+          <ChevronRight
+            className="mt-1 h-4 w-4 shrink-0 text-slate-400 transition-transform group-open:rotate-90"
+            aria-hidden
+          />
+          <div>
+            <h3 className="font-semibold text-slate-900">
+              {task.position + 1}. {task.title}
+            </h3>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <span className="rounded-full bg-slate-100 px-2 py-0.5">{TYPE_LABELS[task.type] ?? task.type}</span>
+              <span>{task.skillName}</span>
+              <span>·</span>
+              <span>{task.marks} marks</span>
+              <span>·</span>
+              <span>{task.timeMinutes} min</span>
+            </div>
           </div>
         </div>
-      </header>
+        <span className="text-xs text-slate-500">
+          {task.rubric.length} criteria{hasPublicData ? " · has data" : ""}
+        </span>
+      </summary>
 
-      <p className="mt-4 whitespace-pre-line text-sm text-slate-700">{task.prompt}</p>
+      <div className="space-y-4 border-t border-slate-100 px-5 pb-5 pt-4">
+        <p className="whitespace-pre-line text-sm text-slate-700">{task.prompt}</p>
 
-      {hasPublicData && (
-        <div className="mt-4">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Data given to the candidate</h4>
-          <div className="mt-2">
+        {hasPublicData && (
+          <Disclosure label="Data given to the candidate" icon={<Eye className="h-3.5 w-3.5 shrink-0" aria-hidden />}>
             <DataPreview data={task.publicData} />
-          </div>
-        </div>
-      )}
+          </Disclosure>
+        )}
 
-      <div className="mt-4">
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Rubric</h4>
-        <table className="mt-2 w-full text-left text-sm">
-          <thead className="text-xs uppercase tracking-wide text-slate-500">
-            <tr>
-              <th scope="col" className="pb-1">Criterion</th>
-              <th scope="col" className="pb-1">What is checked</th>
-              <th scope="col" className="pb-1 text-right">Marks</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {task.rubric.map((criterion) => (
-              <tr key={criterion.position}>
-                <td className="py-2 pr-3 font-medium text-slate-800">{criterion.name}</td>
-                <td className="py-2 pr-3 text-slate-600">{criterion.description}</td>
-                <td className="py-2 text-right text-slate-700">{criterion.maxMarks}</td>
+        <div>
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Rubric</h4>
+          <table className="mt-2 w-full text-left text-sm">
+            <thead className="text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th scope="col" className="pb-1">Criterion</th>
+                <th scope="col" className="pb-1">What is checked</th>
+                <th scope="col" className="pb-1 text-right">Marks</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {task.rubric.map((criterion) => (
+                <tr key={criterion.position}>
+                  <td className="py-2 pr-3 font-medium text-slate-800">{criterion.name}</td>
+                  <td className="py-2 pr-3 text-slate-600">{criterion.description}</td>
+                  <td className="py-2 text-right text-slate-700">{criterion.maxMarks}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-      {Object.keys(task.privateData).length > 0 && (
-        <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <summary className="flex cursor-pointer items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
-            <Lock className="h-3.5 w-3.5" aria-hidden />
-            Recruiter only — answer key and marking guidance
-          </summary>
-          <pre className="mt-2 overflow-x-auto text-xs text-slate-700">{JSON.stringify(task.privateData, null, 2)}</pre>
-          {task.rubric.some((criterion) => criterion.privateGuidance) && (
-            <ul className="mt-2 space-y-1 text-xs text-slate-600">
-              {task.rubric
-                .filter((criterion) => criterion.privateGuidance)
-                .map((criterion) => (
-                  <li key={`guidance-${criterion.position}`}>
-                    <span className="font-medium">{criterion.name}:</span> {criterion.privateGuidance}
-                  </li>
-                ))}
-            </ul>
-          )}
-        </details>
-      )}
-    </article>
+        {Object.keys(task.privateData).length > 0 && (
+          <Disclosure
+            label="Recruiter only — answer key and marking guidance"
+            icon={<Lock className="h-3.5 w-3.5 shrink-0" aria-hidden />}
+          >
+            <pre className="overflow-x-auto text-xs text-slate-700">{JSON.stringify(task.privateData, null, 2)}</pre>
+            {task.rubric.some((criterion) => criterion.privateGuidance) && (
+              <ul className="mt-2 space-y-1 text-xs text-slate-600">
+                {task.rubric
+                  .filter((criterion) => criterion.privateGuidance)
+                  .map((criterion) => (
+                    <li key={`guidance-${criterion.position}`}>
+                      <span className="font-medium">{criterion.name}:</span> {criterion.privateGuidance}
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </Disclosure>
+        )}
+      </div>
+    </details>
   );
 }
 

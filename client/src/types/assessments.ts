@@ -182,3 +182,24 @@ export type VersionList = {
   assessment: { id: string; jobTitle: string; companyName: string };
   versions: VersionSummary[];
 };
+
+export type AssessmentVersionSummary = {
+  id: string;
+  versionNumber: number;
+  status: VersionStatus;
+  title: string;
+  durationMinutes: number;
+  taskCount: number;
+  updatedAt: string;
+};
+
+export type AssessmentSummary = {
+  id: string;
+  jobTitle: string;
+  companyName: string;
+  versionCount: number;
+  latestVersion: AssessmentVersionSummary;
+};
+
+/** `GET /recruiter/assessments` — the recruiter's own assessments. */
+export type AssessmentList = { assessments: AssessmentSummary[] };
