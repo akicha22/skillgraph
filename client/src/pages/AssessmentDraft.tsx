@@ -6,6 +6,7 @@ import DraftEditForm from "../components/DraftEditForm";
 import DataPreview from "../components/DataPreview";
 import { createNewVersion, getDraft, listSubmissions, listVersions, publishVersion } from "../services/assessments";
 import { ApiError } from "../services/api";
+import { humanize } from "../utils/labels";
 import {
   DIFFICULTY_LABELS,
   LEVEL_LABELS,
@@ -16,12 +17,6 @@ import {
   type SubmissionList,
   type VersionList,
 } from "../types/assessments";
-
-/** Turns a stored field name (e.g. `total_revenue`) into a label a person reads. */
-function humanize(key: string): string {
-  const spaced = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/_/g, " ").trim();
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
 
 function StatusBadge({ children, tone }: { children: string; tone: "draft" | "published" | "neutral" }) {
   const classes =
@@ -300,6 +295,10 @@ function DraftView({ assessmentId, versionId }: { assessmentId: string; versionI
 
   const marksOk = draft.totals.marks === 100;
   const weightsOk = draft.totals.weights === 100;
+  // Highest marks first; an attempt with nothing marked yet sits at the bottom.
+  const rankedAttempts = submissions
+    ? [...submissions.attempts].sort((a, b) => b.awarded - a.awarded)
+    : [];
 
   return (
     <DashboardLayout>
@@ -513,8 +512,12 @@ function DraftView({ assessmentId, versionId }: { assessmentId: string; versionI
                   No candidate has submitted this version yet.
                 </p>
               ) : (
+                <>
+                <p className="mt-1 text-xs text-slate-500">
+                  Sorted by marks. Only criteria you have marked count, so a score can still rise.
+                </p>
                 <ul className="mt-3 space-y-2 text-sm">
-                  {submissions.attempts.map((attempt) => (
+                  {rankedAttempts.map((attempt) => (
                     <li key={attempt.id}>
                       <Link
                         to={`/recruiter/attempts/${attempt.id}`}
@@ -531,11 +534,19 @@ function DraftView({ assessmentId, versionId }: { assessmentId: string; versionI
                               : ""}
                           </span>
                         </span>
-                        <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                        <span className="flex shrink-0 items-center gap-2">
+                          <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                            {attempt.scoredCriteria === 0
+                              ? "Not marked"
+                              : `${attempt.awarded} / ${attempt.possible}`}
+                          </span>
+                          <ChevronRight className="h-4 w-4 text-slate-400" aria-hidden />
+                        </span>
                       </Link>
                     </li>
                   ))}
                 </ul>
+                </>
               )}
             </div>
           )}

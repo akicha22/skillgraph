@@ -238,7 +238,12 @@ export type SubmissionSummary = {
   candidateName: string;
   candidateEmail: string;
   submittedAt: string;
+  reviewedAt: string | null;
   answeredTaskCount: number;
+  /** Marks already given; only marked criteria count, so this grows while marking is in progress. */
+  awarded: number;
+  scoredCriteria: number;
+  possible: number;
 };
 
 /** `GET /recruiter/attempts?versionId=` — everyone who submitted a version. */
@@ -252,6 +257,8 @@ export type SubmissionCriterion = {
   id: string;
   name: string;
   description: string;
+  /** Evaluator-only marking note; this response is only ever read by the owning recruiter. */
+  guidance: string;
   maxMarks: number;
   score: number | null;
 };
@@ -264,7 +271,10 @@ export type SubmissionTask = {
   title: string;
   prompt: string;
   marks: number;
+  skillId: string;
   skillName: string;
+  /** Expected values of a data task, for the recruiter to compare the answer against. */
+  answerKey: Record<string, string | number>;
   rubric: SubmissionCriterion[];
   answer: string | null;
   savedAt: string | null;
@@ -276,7 +286,32 @@ export type SubmissionScore = {
   possible: number;
   scoredCriteria: number;
   criterionCount: number;
+  pendingCriteria: number;
   reviewedAt: string | null;
+};
+
+/** One skill's evidence in this attempt: marked criteria only, with its coverage. */
+export type SubmissionSkill = {
+  skillId: string;
+  name: string;
+  awarded: number;
+  possible: number;
+  scoredCriteria: number;
+  criterionCount: number;
+  /** Percentage of this skill's criteria that have been marked. */
+  coverage: number;
+};
+
+/** A question for the live interview, taken from a weak or unmarked criterion. */
+export type FollowUpQuestion = {
+  criterionId: string;
+  criterion: string;
+  taskId: string;
+  taskTitle: string;
+  score: number | null;
+  maxMarks: number;
+  reason: string;
+  question: string;
 };
 
 export type CriterionScoreInput = { criterionId: string; marks: number };
@@ -291,12 +326,21 @@ export type SubmissionDetail = {
   assessment: {
     assessmentId: string;
     versionId: string;
+    versionNumber: number;
     title: string;
     jobTitle: string;
     companyName: string;
     durationMinutes: number;
+    difficulty: string;
+    targetLevel: string;
+    aiPolicy: string;
+    generationMethod: GenerationMethod;
+    generationModel: string | null;
+    publishedAt: string | null;
   };
   score: SubmissionScore;
+  skills: SubmissionSkill[];
+  followUpQuestions: FollowUpQuestion[];
   tasks: SubmissionTask[];
 };
 

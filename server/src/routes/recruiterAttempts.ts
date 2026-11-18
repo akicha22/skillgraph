@@ -46,8 +46,15 @@ const submissionQuery = (attemptId: string, ownerId: string) =>
       version: {
         select: {
           id: true,
+          versionNumber: true,
           title: true,
           durationMinutes: true,
+          difficulty: true,
+          targetLevel: true,
+          aiPolicy: true,
+          generationMethod: true,
+          generationModel: true,
+          publishedAt: true,
           assessment: { select: { id: true, jobTitle: true, companyName: true } },
           tasks: {
             orderBy: { position: "asc" },
@@ -58,10 +65,19 @@ const submissionQuery = (attemptId: string, ownerId: string) =>
               title: true,
               prompt: true,
               marks: true,
-              skill: { select: { name: true } },
+              publicData: true,
+              privateData: true,
+              skill: { select: { id: true, name: true } },
               rubric: {
                 orderBy: { position: "asc" },
-                select: { id: true, name: true, description: true, maxMarks: true },
+                select: {
+                  id: true,
+                  position: true,
+                  name: true,
+                  description: true,
+                  maxMarks: true,
+                  privateGuidance: true,
+                },
               },
             },
           },
@@ -71,6 +87,36 @@ const submissionQuery = (attemptId: string, ownerId: string) =>
   });
 
 type SubmissionRecord = NonNullable<Awaited<ReturnType<typeof submissionQuery>>>;
+
+/** Only the expected values of a data task, from privateData; nothing else of it is exposed. */
+function answerKeyOf(privateData: string): Record<string, string | number> {
+  try {
+    const parsed: unknown = JSON.parse(privateData);
+    const key =
+      typeof parsed === "object" && parsed !== null
+        ? (parsed as Record<string, unknown>).answerKey
+        : null;
+    if (typeof key !== "object" || key === null) return {};
+    return Object.fromEntries(
+      Object.entries(key as Record<string, unknown>)
+        .filter(([, value]) => typeof value === "string" || typeof value === "number")
+        .map(([name, value]) => [name, value as string | number]),
+    );
+  } catch {
+    return {};
+  }
+}
+
+type FollowUpQuestion = {
+  criterionId: string;
+  criterion: string;
+  taskId: string;
+  taskTitle: string;
+  score: number | null;
+  maxMarks: number;
+  reason: string;
+  question: string;
+};
 
 /** The answers, the criteria they are scored against, and the running total. */
 function serializeSubmission(attempt: SubmissionRecord) {
@@ -84,6 +130,19 @@ function serializeSubmission(attempt: SubmissionRecord) {
   let awarded = 0;
   let possible = 0;
 
+  // Per skill: only marked criteria count towards the marks, coverage says how much is marked.
+  const skills = new Map<
+    string,
+    {
+      skillId: string;
+      name: string;
+      awarded: number;
+      possible: number;
+      scoredCriteria: number;
+      criterionCount: number;
+    }
+  >();
+
   const tasks = attempt.version.tasks.map((task) => {
     possible += task.marks;
     const rubric = task.rubric.map((criterion) => {
@@ -93,10 +152,28 @@ function serializeSubmission(attempt: SubmissionRecord) {
         scoredCriteria += 1;
         awarded += marks;
       }
+
+      const skill = skills.get(task.skill.id) ?? {
+        skillId: task.skill.id,
+        name: task.skill.name,
+        awarded: 0,
+        possible: 0,
+        scoredCriteria: 0,
+        criterionCount: 0,
+      };
+      skill.possible += criterion.maxMarks;
+      skill.criterionCount += 1;
+      if (marks !== null) {
+        skill.awarded += marks;
+        skill.scoredCriteria += 1;
+      }
+      skills.set(task.skill.id, skill);
+
       return {
         id: criterion.id,
         name: criterion.name,
         description: criterion.description,
+        guidance: criterion.privateGuidance,
         maxMarks: criterion.maxMarks,
         score: marks,
       };
@@ -110,13 +187,52 @@ function serializeSubmission(attempt: SubmissionRecord) {
       title: task.title,
       prompt: task.prompt,
       marks: task.marks,
+      skillId: task.skill.id,
       skillName: task.skill.name,
+      answerKey: answerKeyOf(task.privateData),
       rubric,
       // An empty save arrives as null so every screen treats it as unanswered.
       answer: hasAnswer(response?.answer) ? (response?.answer ?? null) : null,
       savedAt: response?.savedAt ?? null,
     };
   });
+
+  // Three interview questions from the weakest or unmarked criteria, one per task. Rule-based
+  // from the rubric: no AI and no outcome is decided here.
+  const ranked = tasks
+    .flatMap((task) =>
+      task.rubric.map((criterion) => ({
+        criterionId: criterion.id,
+        criterion: criterion.name,
+        taskId: task.id,
+        taskTitle: task.title,
+        score: criterion.score,
+        maxMarks: criterion.maxMarks,
+        ratio:
+          criterion.score === null ? 0 : criterion.score / Math.max(1, criterion.maxMarks),
+        question: `On "${task.title}", walk me through how you handled "${criterion.name}". What did you check, and what would you do differently?`,
+      })),
+    )
+    .sort((a, b) => a.ratio - b.ratio);
+
+  const followUpQuestions: FollowUpQuestion[] = [];
+  const questionedTaskIds = new Set<string>();
+  for (const row of ranked) {
+    if (followUpQuestions.length >= 3) break;
+    if (questionedTaskIds.has(row.taskId)) continue;
+    questionedTaskIds.add(row.taskId);
+    followUpQuestions.push({
+      criterionId: row.criterionId,
+      criterion: row.criterion,
+      taskId: row.taskId,
+      taskTitle: row.taskTitle,
+      score: row.score,
+      maxMarks: row.maxMarks,
+      reason:
+        row.score === null ? "Not marked yet" : `Scored ${row.score} of ${row.maxMarks}`,
+      question: row.question,
+    });
+  }
 
   return {
     id: attempt.id,
@@ -131,14 +247,30 @@ function serializeSubmission(attempt: SubmissionRecord) {
       jobTitle: attempt.version.assessment.jobTitle,
       companyName: attempt.version.assessment.companyName,
       durationMinutes: attempt.version.durationMinutes,
+      versionNumber: attempt.version.versionNumber,
+      difficulty: attempt.version.difficulty,
+      targetLevel: attempt.version.targetLevel,
+      aiPolicy: attempt.version.aiPolicy,
+      generationMethod: attempt.version.generationMethod,
+      generationModel: attempt.version.generationModel,
+      publishedAt: attempt.version.publishedAt,
     },
     score: {
       awarded,
       possible,
       scoredCriteria,
       criterionCount,
+      pendingCriteria: criterionCount - scoredCriteria,
       reviewedAt: attempt.reviewedAt,
     },
+    skills: [...skills.values()].map((skill) => ({
+      ...skill,
+      coverage:
+        skill.criterionCount === 0
+          ? 0
+          : Math.round((skill.scoredCriteria / skill.criterionCount) * 100),
+    })),
+    followUpQuestions,
     tasks,
   };
 }
@@ -160,6 +292,7 @@ recruiterAttemptsRouter.get(
         title: true,
         durationMinutes: true,
         _count: { select: { tasks: true } },
+        tasks: { select: { marks: true } },
       },
     });
     if (!version) {
@@ -173,9 +306,11 @@ recruiterAttemptsRouter.get(
       select: {
         id: true,
         submittedAt: true,
+        reviewedAt: true,
         candidate: { select: { name: true, email: true } },
         // Counted here rather than with _count so an empty saved answer is not an answer.
         responses: { select: { answer: true } },
+        criterionScores: { select: { marks: true } },
       },
     });
 
@@ -191,8 +326,12 @@ recruiterAttemptsRouter.get(
         candidateName: attempt.candidate.name,
         candidateEmail: attempt.candidate.email,
         submittedAt: attempt.submittedAt,
+        reviewedAt: attempt.reviewedAt,
         answeredTaskCount: attempt.responses.filter((response) => hasAnswer(response.answer))
           .length,
+        awarded: attempt.criterionScores.reduce((sum, score) => sum + score.marks, 0),
+        scoredCriteria: attempt.criterionScores.length,
+        possible: version.tasks.reduce((sum, task) => sum + task.marks, 0),
       })),
     });
   }),

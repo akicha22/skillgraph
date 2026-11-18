@@ -1,10 +1,18 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Clock } from "lucide-react";
 import DashboardLayout from "../layouts/DashboardLayout";
+// Charts are only needed on this page, so they load as their own chunk.
+const SkillChart = lazy(() => import("../components/SkillChart"));
 import { getSubmission, saveSubmissionScores } from "../services/assessments";
 import { ApiError } from "../services/api";
-import { TASK_TYPE_LABELS, type SubmissionDetail } from "../types/assessments";
+import { humanize } from "../utils/labels";
+import {
+  DIFFICULTY_LABELS,
+  METHOD_LABELS,
+  TASK_TYPE_LABELS,
+  type SubmissionDetail,
+} from "../types/assessments";
 
 /** The score boxes start from what is already saved; empty means "not scored yet". */
 function scoreInputsFrom(submission: SubmissionDetail) {
@@ -158,6 +166,27 @@ export default function RecruiterSubmission() {
               Submitted {new Date(submission.submittedAt).toLocaleString()}
             </span>
           )}
+          <span className="rounded-full bg-slate-100 px-2.5 py-0.5">
+            Version {submission.assessment.versionNumber}
+          </span>
+          <span className="rounded-full bg-slate-100 px-2.5 py-0.5">
+            {DIFFICULTY_LABELS[submission.assessment.difficulty as keyof typeof DIFFICULTY_LABELS] ??
+              submission.assessment.difficulty}
+          </span>
+          <span className="rounded-full bg-slate-100 px-2.5 py-0.5">
+            {METHOD_LABELS[submission.assessment.generationMethod] ??
+              submission.assessment.generationMethod}
+          </span>
+          {submission.score.scoredCriteria > 0 &&
+            (submission.score.pendingCriteria === 0 ? (
+              <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-emerald-700">
+                Human-reviewed — every criterion marked
+              </span>
+            ) : (
+              <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-amber-800">
+                {submission.score.pendingCriteria} criteria pending review
+              </span>
+            ))}
         </div>
         <Link
           to={`/recruiter/assessments/${submission.assessment.assessmentId}/versions/${submission.assessment.versionId}`}
@@ -205,6 +234,83 @@ export default function RecruiterSubmission() {
         {scoreError && <p className="mt-2 text-sm text-rose-700">{scoreError}</p>}
       </section>
 
+      {submission.skills.length > 0 && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6">
+          <h2 className="text-lg font-semibold text-slate-900">Skill evidence</h2>
+          <p className="mt-1 max-w-3xl text-sm text-slate-600">
+            Only criteria you have marked count towards a skill. Coverage shows how much of that
+            skill&apos;s rubric is marked, so low coverage is missing evidence, not a low score.
+          </p>
+          <div className="mt-4 grid gap-6 lg:grid-cols-2">
+            <table className="w-full text-left text-sm">
+              <thead className="text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th scope="col" className="pb-1">
+                    Skill
+                  </th>
+                  <th scope="col" className="pb-1 text-right">
+                    Marks
+                  </th>
+                  <th scope="col" className="pb-1 text-right">
+                    Coverage
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {submission.skills.map((skill) => (
+                  <tr key={skill.skillId}>
+                    <td className="py-2 pr-3 font-medium text-slate-800">{skill.name}</td>
+                    <td className="py-2 pr-3 text-right text-slate-700">
+                      {skill.awarded} / {skill.possible}
+                    </td>
+                    <td className="py-2 text-right text-xs text-slate-600">
+                      {skill.coverage}% ({skill.scoredCriteria} of {skill.criterionCount} marked)
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-slate-500">
+                Share of each skill&apos;s marks awarded
+              </p>
+              <Suspense fallback={<div className="mt-2 h-64" />}>
+                <SkillChart
+                  rows={submission.skills.map((skill) => ({
+                    name: skill.name,
+                    percent:
+                      skill.possible === 0
+                        ? 0
+                        : Math.round((skill.awarded / skill.possible) * 100),
+                  }))}
+                />
+              </Suspense>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {submission.followUpQuestions.length > 0 && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6">
+          <h2 className="text-lg font-semibold text-slate-900">Interview follow-up questions</h2>
+          <p className="mt-1 max-w-3xl text-sm text-slate-600">
+            Taken from the lowest-scoring or still-unmarked criteria, one per task, so you can check
+            the work in a live conversation. Chosen from the rubric by a fixed rule — no AI is
+            involved.
+          </p>
+          <ol className="mt-3 space-y-3">
+            {submission.followUpQuestions.map((item) => (
+              <li key={item.criterionId} className="rounded-xl bg-slate-50 p-3">
+                <p className="text-sm text-slate-800">{item.question}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {item.taskTitle} · {item.criterion} · {item.reason}
+                </p>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-slate-900">Answers and marks</h2>
         {submission.tasks.map((task) => (
@@ -226,6 +332,26 @@ export default function RecruiterSubmission() {
             </header>
 
             <p className="mt-3 whitespace-pre-line text-sm text-slate-700">{task.prompt}</p>
+
+            {Object.keys(task.answerKey).length > 0 && (
+              <details className="mt-3 rounded-xl border border-amber-200 bg-amber-50/60">
+                <summary className="cursor-pointer px-3 py-2 text-xs font-semibold uppercase tracking-wide text-amber-900">
+                  Expected answers — recruiter only
+                </summary>
+                <table className="w-full text-left text-sm">
+                  <tbody className="divide-y divide-amber-200/70">
+                    {Object.entries(task.answerKey).map(([name, expected]) => (
+                      <tr key={name}>
+                        <td className="px-3 py-1.5 text-slate-700">{humanize(name)}</td>
+                        <td className="px-3 py-1.5 text-right font-medium text-slate-900">
+                          {String(expected)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </details>
+            )}
 
             <div className="mt-4">
               <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -269,8 +395,17 @@ export default function RecruiterSubmission() {
                       (!Number.isInteger(value) || value < 0 || value > criterion.maxMarks);
                     return (
                       <tr key={criterion.id}>
-                        <td className="py-2 pr-3 font-medium text-slate-800">{criterion.name}</td>
-                        <td className="py-2 pr-3 text-slate-600">{criterion.description}</td>
+                        <td className="py-2 pr-3 align-top font-medium text-slate-800">
+                          {criterion.name}
+                        </td>
+                        <td className="py-2 pr-3 align-top text-slate-600">
+                          {criterion.description}
+                          {criterion.guidance && (
+                            <span className="mt-1 block border-l-2 border-amber-300 pl-2 text-xs text-amber-900">
+                              Marking note: {criterion.guidance}
+                            </span>
+                          )}
+                        </td>
                         <td className="py-2 pl-3">
                           <div className="flex items-center justify-end gap-1">
                             <input
