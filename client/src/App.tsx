@@ -10,6 +10,7 @@ import MySkills from "./pages/MySkills";
 import AssessmentWizard from "./components/AssessmentWizard";
 import AssessmentDraft from "./pages/AssessmentDraft";
 import CandidateAssessmentPage from "./pages/CandidateAssessment";
+import RecruiterSubmission from "./pages/RecruiterSubmission";
 
 export default function App() {
   return (
@@ -68,7 +69,16 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-          <Route path="*" element={<Navigate to="/" replace />} />
+                    <Route
+            path="/recruiter/attempts/:attemptId"
+            element={
+              <ProtectedRoute role="RECRUITER">
+                <RecruiterSubmission />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

@@ -11,6 +11,8 @@ import type {
   GenerateRequest,
   GenerateResponse,
   ParsedRequirements,
+  SubmissionDetail,
+  SubmissionList,
   VersionList,
 } from "../types/assessments";
 
@@ -52,6 +54,16 @@ export function publishVersion(assessmentId: string, versionId: string) {
 /** Copies a published version into the next draft version. */
 export function createNewVersion(assessmentId: string, versionId: string) {
   return api.post<DraftVersion>(`${BASE}/${assessmentId}/versions/${versionId}/new-version`);
+}
+
+/** Everyone who has submitted a version of the recruiter's own assessment. */
+export function listSubmissions(versionId: string) {
+  return api.get<SubmissionList>(`/recruiter/attempts?versionId=${encodeURIComponent(versionId)}`);
+}
+
+/** One candidate's submitted answers, with the criteria they are scored against. */
+export function getSubmission(attemptId: string) {
+  return api.get<SubmissionDetail>(`/recruiter/attempts/${attemptId}`);
 }
 
 /** The published version a candidate opens; private data is stripped on the server. */

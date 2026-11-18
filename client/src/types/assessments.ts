@@ -232,6 +232,52 @@ export type CandidateTask = {
   rubric: CandidateCriterion[];
 };
 
+export type SubmissionSummary = {
+  id: string;
+  candidateName: string;
+  candidateEmail: string;
+  submittedAt: string;
+  answeredTaskCount: number;
+};
+
+/** `GET /recruiter/attempts?versionId=` — everyone who submitted a version. */
+export type SubmissionList = {
+  version: { id: string; title: string; taskCount: number; durationMinutes: number };
+  attempts: SubmissionSummary[];
+};
+
+/** One answered task; the answer key and private guidance are never part of this. */
+export type SubmissionTask = {
+  id: string;
+  position: number;
+  type: string;
+  title: string;
+  prompt: string;
+  marks: number;
+  skillName: string;
+  rubric: { name: string; description: string; maxMarks: number }[];
+  answer: string | null;
+  savedAt: string | null;
+};
+
+/** `GET /recruiter/attempts/:attemptId` — one candidate's submitted answers. */
+export type SubmissionDetail = {
+  id: string;
+  status: string;
+  startedAt: string;
+  submittedAt: string | null;
+  candidate: { name: string; email: string };
+  assessment: {
+    assessmentId: string;
+    versionId: string;
+    title: string;
+    jobTitle: string;
+    companyName: string;
+    durationMinutes: number;
+  };
+  tasks: SubmissionTask[];
+};
+
 export type CandidateAssessmentSummary = {
   id: string;
   title: string;

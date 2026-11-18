@@ -4,7 +4,7 @@ import { AlertTriangle, ArrowLeft, ChevronRight, Eye, FileText, GitBranch, Lock,
 import DashboardLayout from "../layouts/DashboardLayout";
 import DraftEditForm from "../components/DraftEditForm";
 import DataPreview from "../components/DataPreview";
-import { createNewVersion, getDraft, listVersions, publishVersion } from "../services/assessments";
+import { createNewVersion, getDraft, listSubmissions, listVersions, publishVersion } from "../services/assessments";
 import { ApiError } from "../services/api";
 import {
   DIFFICULTY_LABELS,
@@ -13,6 +13,7 @@ import {
   TASK_TYPE_LABELS,
   type DraftTask,
   type DraftVersion,
+  type SubmissionList,
   type VersionList,
 } from "../types/assessments";
 
@@ -139,6 +140,7 @@ export default function AssessmentDraft() {
 function DraftView({ assessmentId, versionId }: { assessmentId: string; versionId: string }) {
   const [draft, setDraft] = useState<DraftVersion | null>(null);
   const [versions, setVersions] = useState<VersionList["versions"]>([]);
+  const [submissions, setSubmissions] = useState<SubmissionList | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -165,6 +167,21 @@ function DraftView({ assessmentId, versionId }: { assessmentId: string; versionI
       cancelled = true;
     };
   }, [assessmentId, versionId]);
+
+  // Submissions are informational here: a failure must not hide the version itself.
+  useEffect(() => {
+    let cancelled = false;
+    listSubmissions(versionId)
+      .then((list) => {
+        if (!cancelled) setSubmissions(list);
+      })
+      .catch(() => {
+        /* The version page still works without the submission list. */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [versionId]);
 
   function refreshVersions() {
     listVersions(assessmentId)
@@ -445,6 +462,48 @@ function DraftView({ assessmentId, versionId }: { assessmentId: string; versionI
               })}
             </ul>
           </div>
+
+          {draft.status === "PUBLISHED" && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-6">
+              <div className="flex items-baseline justify-between gap-2">
+                <h2 className="text-lg font-semibold text-slate-900">Submissions</h2>
+                {submissions && (
+                  <span className="text-xs text-slate-500">{submissions.attempts.length}</span>
+                )}
+              </div>
+              {!submissions ? (
+                <p className="mt-3 text-sm text-slate-600">Loading submissions…</p>
+              ) : submissions.attempts.length === 0 ? (
+                <p className="mt-3 text-sm text-slate-600">
+                  No candidate has submitted this version yet.
+                </p>
+              ) : (
+                <ul className="mt-3 space-y-2 text-sm">
+                  {submissions.attempts.map((attempt) => (
+                    <li key={attempt.id}>
+                      <Link
+                        to={`/recruiter/attempts/${attempt.id}`}
+                        className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-slate-700 hover:bg-slate-50"
+                      >
+                        <span>
+                          <span className="font-medium text-slate-900">
+                            {attempt.candidateName}
+                          </span>
+                          <span className="block text-xs text-slate-500">
+                            {attempt.answeredTaskCount} of {submissions.version.taskCount} answered
+                            {attempt.submittedAt
+                              ? ` · ${new Date(attempt.submittedAt).toLocaleDateString()}`
+                              : ""}
+                          </span>
+                        </span>
+                        <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           <Link
             to="/recruiter"
