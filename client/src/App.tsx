@@ -9,6 +9,7 @@ import RecruiterDashboard from "./pages/RecruiterDashboard";
 import MySkills from "./pages/MySkills";
 import AssessmentWizard from "./components/AssessmentWizard";
 import AssessmentDraft from "./pages/AssessmentDraft";
+import CandidateAssessmentPage from "./pages/CandidateAssessment";
 
 export default function App() {
   return (
@@ -40,6 +41,14 @@ export default function App() {
             element={
               <ProtectedRoute role="RECRUITER">
                 <RecruiterDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/candidate/assessments/:versionId"
+            element={
+              <ProtectedRoute role="CANDIDATE">
+                <CandidateAssessmentPage />
               </ProtectedRoute>
             }
           />

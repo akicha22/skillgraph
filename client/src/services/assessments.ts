@@ -1,6 +1,7 @@
 import { api } from "./api";
 import type {
   AssessmentList,
+  CandidateAssessmentDetail,
   DraftUpdateRequest,
   DraftVersion,
   GenerateRequest,
@@ -47,4 +48,9 @@ export function publishVersion(assessmentId: string, versionId: string) {
 /** Copies a published version into the next draft version. */
 export function createNewVersion(assessmentId: string, versionId: string) {
   return api.post<DraftVersion>(`${BASE}/${assessmentId}/versions/${versionId}/new-version`);
+}
+
+/** The published version a candidate opens; private data is stripped on the server. */
+export function getCandidateAssessment(versionId: string) {
+  return api.get<CandidateAssessmentDetail>(`/candidate/assessments/${versionId}`);
 }

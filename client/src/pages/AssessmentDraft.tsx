@@ -3,23 +3,18 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, ChevronRight, Eye, FileText, GitBranch, Lock, Pencil, Send } from "lucide-react";
 import DashboardLayout from "../layouts/DashboardLayout";
 import DraftEditForm from "../components/DraftEditForm";
+import DataPreview from "../components/DataPreview";
 import { createNewVersion, getDraft, listVersions, publishVersion } from "../services/assessments";
 import { ApiError } from "../services/api";
 import {
   DIFFICULTY_LABELS,
   LEVEL_LABELS,
   METHOD_LABELS,
+  TASK_TYPE_LABELS,
   type DraftTask,
   type DraftVersion,
   type VersionList,
 } from "../types/assessments";
-
-const TYPE_LABELS: Record<string, string> = {
-  STRUCTURED_RESPONSE: "Written response",
-  DATA_TASK: "Data task",
-  DATA_ANALYTICAL: "Data task",
-  FILE_SUBMISSION: "File upload",
-};
 
 function StatusBadge({ children, tone }: { children: string; tone: "draft" | "published" | "neutral" }) {
   const classes =
@@ -48,48 +43,6 @@ function Disclosure({ label, icon, children }: { label: string; icon: ReactNode;
   );
 }
 
-/** Templates store datasets as `{ table: { columns, rows } }`; anything else is shown as JSON. */
-function DataPreview({ data }: { data: Record<string, unknown> }) {
-  const table = data.table as { columns?: unknown; rows?: unknown } | undefined;
-  const columns = Array.isArray(table?.columns) ? table.columns.map(String) : null;
-  const rows = Array.isArray(table?.rows) ? (table.rows as Record<string, unknown>[]) : null;
-
-  if (columns && rows && rows.length > 0) {
-    return (
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-            <tr>
-              {columns.map((column) => (
-                <th key={column} scope="col" className="whitespace-nowrap px-3 py-2">
-                  {column}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.map((row, index) => (
-              <tr key={index}>
-                {columns.map((column) => (
-                  <td key={column} className="whitespace-nowrap px-3 py-2 text-slate-700">
-                    {String(row[column] ?? "")}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
-
-  return (
-    <pre className="overflow-x-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100">
-      {JSON.stringify(data, null, 2)}
-    </pre>
-  );
-}
-
 /** Collapsed by default so a long assessment stays a short list until a task is opened. */
 function TaskCard({ task }: { task: DraftTask }) {
   const hasPublicData = Object.keys(task.publicData).length > 0;
@@ -106,7 +59,9 @@ function TaskCard({ task }: { task: DraftTask }) {
               {task.position + 1}. {task.title}
             </h3>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              <span className="rounded-full bg-slate-100 px-2 py-0.5">{TYPE_LABELS[task.type] ?? task.type}</span>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5">
+                {TASK_TYPE_LABELS[task.type] ?? task.type}
+              </span>
               <span>{task.skillName}</span>
               <span>·</span>
               <span>{task.marks} marks</span>

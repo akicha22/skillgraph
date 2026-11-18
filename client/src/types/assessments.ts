@@ -26,6 +26,13 @@ export const DIFFICULTY_LABELS: Record<AssessmentDifficulty, string> = {
   ADVANCED: "Advanced",
 };
 
+export const TASK_TYPE_LABELS: Record<string, string> = {
+  STRUCTURED_RESPONSE: "Written response",
+  DATA_TASK: "Data task",
+  DATA_ANALYTICAL: "Data task",
+  FILE_SUBMISSION: "File upload",
+};
+
 /** What `POST /parse-requirements` extracts from the recruiter's free text. */
 export type ParsedRequirements = {
   jobTitle: string | null;
@@ -203,3 +210,43 @@ export type AssessmentSummary = {
 
 /** `GET /recruiter/assessments` — the recruiter's own assessments. */
 export type AssessmentList = { assessments: AssessmentSummary[] };
+
+/** What a candidate receives for a published version: no private data, guidance or answer key. */
+export type CandidateCriterion = {
+  position: number;
+  name: string;
+  description: string;
+  maxMarks: number;
+};
+
+export type CandidateTask = {
+  id: string;
+  position: number;
+  type: string;
+  skillName: string;
+  title: string;
+  prompt: string;
+  marks: number;
+  timeMinutes: number;
+  publicData: Record<string, unknown>;
+  rubric: CandidateCriterion[];
+};
+
+/** `GET /candidate/assessments/:versionId` — a published version as the candidate sees it. */
+export type CandidateAssessmentDetail = {
+  id: string;
+  versionNumber: number;
+  title: string;
+  description: string;
+  jobContext: string;
+  candidateInstructions: string;
+  targetLevel: AssessmentLevel;
+  difficulty: AssessmentDifficulty;
+  aiPolicy: AiPolicy;
+  durationMinutes: number;
+  publishedAt: string | null;
+  assessment: { jobTitle: string; companyName: string };
+  skills: { name: string; weight: number }[];
+  tasks: CandidateTask[];
+  totals: { marks: number; durationMinutes: number; taskCount: number };
+};
