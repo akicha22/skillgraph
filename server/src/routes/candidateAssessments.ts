@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../db";
-import { requireAuth, requireRole } from "../middleware/auth";
+import { currentUser, requireAuth, requireRole } from "../middleware/auth";
 import { asyncHandler } from "../utils/asyncHandler";
 
 export const candidateAssessmentsRouter = Router();
@@ -50,8 +50,11 @@ type CandidateVersionRecord = {
  * Builds the candidate's view from an allowlist, so privateData, privateGuidance, the answer
  * key and the recruiter's brief can never reach a candidate by being spread in by mistake.
  * Only fields the candidate page renders are included.
+ *
+ * Until the candidate starts, each task is described by its topic alone: title, prompt, data and
+ * criteria stay on the server, so a question cannot be read before the assessment is taken.
  */
-function serializeCandidateVersion(version: CandidateVersionRecord) {
+function serializeCandidateVersion(version: CandidateVersionRecord, started: boolean) {
   return {
     title: version.title,
     description: version.description,
@@ -65,22 +68,25 @@ function serializeCandidateVersion(version: CandidateVersionRecord) {
       jobTitle: version.assessment.jobTitle,
       companyName: version.assessment.companyName,
     },
+    started,
     tasks: version.tasks.map((task) => ({
       id: task.id,
       position: task.position,
       type: task.type,
       skillName: task.skill.name,
-      title: task.title,
-      prompt: task.prompt,
       marks: task.marks,
       timeMinutes: task.timeMinutes,
-      publicData: parseData(task.publicData),
-      rubric: task.rubric.map((criterion) => ({
-        position: criterion.position,
-        name: criterion.name,
-        description: criterion.description,
-        maxMarks: criterion.maxMarks,
-      })),
+      title: started ? task.title : null,
+      prompt: started ? task.prompt : null,
+      publicData: started ? parseData(task.publicData) : {},
+      rubric: started
+        ? task.rubric.map((criterion) => ({
+            position: criterion.position,
+            name: criterion.name,
+            description: criterion.description,
+            maxMarks: criterion.maxMarks,
+          }))
+        : [],
     })),
   };
 }
@@ -134,6 +140,11 @@ candidateAssessmentsRouter.get(
       return;
     }
 
-    res.json(serializeCandidateVersion(version));
+    const started =
+      (await prisma.assessmentAttempt.count({
+        where: { versionId: version.id, candidateId: currentUser(res).id },
+      })) > 0;
+
+    res.json(serializeCandidateVersion(version, started));
   }),
 );

@@ -224,10 +224,11 @@ export type CandidateTask = {
   position: number;
   type: string;
   skillName: string;
-  title: string;
-  prompt: string;
   marks: number;
   timeMinutes: number;
+  /** Null until the candidate starts: the question itself is not sent before then. */
+  title: string | null;
+  prompt: string | null;
   publicData: Record<string, unknown>;
   rubric: CandidateCriterion[];
 };
@@ -246,6 +247,15 @@ export type SubmissionList = {
   attempts: SubmissionSummary[];
 };
 
+/** One rubric criterion as the recruiter scores it; guidance stays on the server. */
+export type SubmissionCriterion = {
+  id: string;
+  name: string;
+  description: string;
+  maxMarks: number;
+  score: number | null;
+};
+
 /** One answered task; the answer key and private guidance are never part of this. */
 export type SubmissionTask = {
   id: string;
@@ -255,10 +265,21 @@ export type SubmissionTask = {
   prompt: string;
   marks: number;
   skillName: string;
-  rubric: { name: string; description: string; maxMarks: number }[];
+  rubric: SubmissionCriterion[];
   answer: string | null;
   savedAt: string | null;
 };
+
+/** The running total for a submission; `reviewedAt` is set once every criterion is scored. */
+export type SubmissionScore = {
+  awarded: number;
+  possible: number;
+  scoredCriteria: number;
+  criterionCount: number;
+  reviewedAt: string | null;
+};
+
+export type CriterionScoreInput = { criterionId: string; marks: number };
 
 /** `GET /recruiter/attempts/:attemptId` — one candidate's submitted answers. */
 export type SubmissionDetail = {
@@ -275,6 +296,7 @@ export type SubmissionDetail = {
     companyName: string;
     durationMinutes: number;
   };
+  score: SubmissionScore;
   tasks: SubmissionTask[];
 };
 
@@ -313,6 +335,8 @@ export type CandidateAttemptLookup = { attempt: CandidateAttempt | null };
 
 /** `GET /candidate/assessments/:versionId` — a published version as the candidate sees it. */
 export type CandidateAssessmentDetail = {
+  /** False until the candidate starts, while only task topics are described. */
+  started: boolean;
   title: string;
   description: string;
   jobContext: string;

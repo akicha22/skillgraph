@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Clock, FileText, Table2 } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Clock,
+  FileText,
+  Table2,
+} from "lucide-react";
 import DashboardLayout from "../layouts/DashboardLayout";
 import DataPreview from "../components/DataPreview";
 import {
@@ -34,12 +41,17 @@ export default function CandidateAssessmentPage() {
   const [attemptError, setAttemptError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [confirmingSubmit, setConfirmingSubmit] = useState(false);
+  const [reloadingQuestions, setReloadingQuestions] = useState(false);
+  // One task is shown at a time; the strip above the slide switches between them.
+  const [activeIndex, setActiveIndex] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     getCandidateAssessment(versionId)
       .then((loaded) => {
-        if (!cancelled) setAssessment(loaded);
+        if (cancelled) return;
+        setAssessment(loaded);
+        setActiveIndex(0);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -89,10 +101,29 @@ export default function CandidateAssessmentPage() {
       const started = await startCandidateAttempt(versionId);
       setAttempt(started);
       setDrafts(Object.fromEntries(started.responses.map((row) => [row.taskId, row.answer])));
+      setActiveIndex(0);
+      // The questions are only sent once an attempt exists, so the page re-reads them now.
+      setAssessment(await getCandidateAssessment(versionId));
     } catch (err) {
-      setAttemptError(err instanceof Error ? err.message : "Could not start this assessment.");
+      setAttemptError(
+        err instanceof Error
+          ? err.message
+          : "Could not start this assessment. Reload the page and try again.",
+      );
     } finally {
       setStarting(false);
+    }
+  }
+
+  async function reloadQuestions() {
+    setReloadingQuestions(true);
+    setAttemptError(null);
+    try {
+      setAssessment(await getCandidateAssessment(versionId));
+    } catch (err) {
+      setAttemptError(err instanceof Error ? err.message : "Could not load the questions.");
+    } finally {
+      setReloadingQuestions(false);
     }
   }
 
@@ -165,7 +196,17 @@ export default function CandidateAssessmentPage() {
     );
   }
 
-  const totalMarks = assessment.tasks.reduce((sum, task) => sum + task.marks, 0);
+  const tasks = assessment.tasks;
+  const totalMarks = tasks.reduce((sum, task) => sum + task.marks, 0);
+  const safeIndex = tasks.length > 0 ? Math.min(activeIndex, tasks.length - 1) : 0;
+  const activeTask = tasks[safeIndex] ?? null;
+  const savedTaskIds = new Set(
+    (activeAttempt?.responses ?? [])
+      .filter((response) => response.answer.trim().length > 0)
+      .map((response) => response.taskId),
+  );
+  const savedCount = savedTaskIds.size;
+  const questionsReady = assessment.started;
 
   return (
     <DashboardLayout>
@@ -173,12 +214,10 @@ export default function CandidateAssessmentPage() {
         <p className="text-xs uppercase tracking-wide text-slate-500">
           {assessment.assessment.companyName} · {assessment.assessment.jobTitle}
         </p>
-        <h1 className="mt-1 text-2xl font-semibold text-slate-900">{assessment.title}</h1>
+        <h1 className="mt-1 text-2xl font-bold text-slate-900">{assessment.title}</h1>
         <p className="mt-2 text-sm text-slate-600">{assessment.description}</p>
         <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-          <span className="rounded-full bg-slate-100 px-2.5 py-0.5">
-            {assessment.tasks.length} tasks
-          </span>
+          <span className="rounded-full bg-slate-100 px-2.5 py-0.5">{tasks.length} tasks</span>
           <span className="rounded-full bg-slate-100 px-2.5 py-0.5">{totalMarks} marks</span>
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5">
             <Clock className="h-3.5 w-3.5" aria-hidden />
@@ -194,61 +233,17 @@ export default function CandidateAssessmentPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-6">
-        {attemptLoading ? (
-          <p className="text-sm text-indigo-900">Checking your attempt…</p>
-        ) : activeAttempt ? (
-          <>
-            <h2 className="text-lg font-semibold text-slate-900">
-              {activeAttempt.status === "IN_PROGRESS" ? "Answering in progress" : "Attempt submitted"}
-            </h2>
-            <p className="mt-1 text-sm text-indigo-900">
-              {activeAttempt.status === "IN_PROGRESS"
-                ? "Write each answer, then save it. Saved answers stay here if you come back later; nothing is submitted yet."
-                : `Your answers are saved and this attempt was submitted${
-                    activeAttempt.submittedAt
-                      ? ` on ${new Date(activeAttempt.submittedAt).toLocaleString()}`
-                      : ""
-                  }. It can no longer be changed.`}
-            </p>
-            {activeAttempt.status === "IN_PROGRESS" &&
-              (confirmingSubmit ? (
-                <div className="mt-3 rounded-xl border border-indigo-200 bg-white p-3">
-                  <p className="text-sm text-slate-700">
-                    Submit this attempt? Only saved answers are submitted, and answers cannot be
-                    changed afterwards.
-                  </p>
-                  <div className="mt-2 flex items-center gap-2">
-                    <button
-                      onClick={() => void submitAttempt()}
-                      disabled={submitting}
-                      className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
-                    >
-                      {submitting ? "Submitting…" : "Submit and lock"}
-                    </button>
-                    <button
-                      onClick={() => setConfirmingSubmit(false)}
-                      disabled={submitting}
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setConfirmingSubmit(true)}
-                  className="mt-3 rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
-                >
-                  Submit attempt
-                </button>
-              ))}
-          </>
-        ) : (
-          <>
+      {attemptLoading ? (
+        <p className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
+          Checking your attempt…
+        </p>
+      ) : !activeAttempt ? (
+        <>
+          <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-6">
             <h2 className="text-lg font-semibold text-slate-900">Ready to start?</h2>
             <p className="mt-1 text-sm text-indigo-900">
-              Starting opens an answer box under each task and keeps your saved answers for later.
+              You will see one task at a time and can move between them. Each task has its own answer
+              box, and saved answers are kept if you come back later.
             </p>
             <button
               onClick={() => void startAttempt()}
@@ -257,131 +252,325 @@ export default function CandidateAssessmentPage() {
             >
               {starting ? "Starting…" : "Start answering"}
             </button>
-          </>
-        )}
-        {attemptError && <p className="mt-2 text-sm text-rose-700">{attemptError}</p>}
-      </section>
+          </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
-        <h2 className="text-lg font-semibold text-slate-900">Before you start</h2>
-        <p className="mt-3 whitespace-pre-line text-sm text-slate-700">{assessment.jobContext}</p>
-        <h3 className="mt-4 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          <FileText className="h-3.5 w-3.5" aria-hidden />
-          Instructions
-        </h3>
-        <p className="mt-1 whitespace-pre-line text-sm text-slate-700">{assessment.candidateInstructions}</p>
-      </section>
+          <section className="rounded-2xl border border-slate-200 bg-white p-6">
+            <h2 className="text-lg font-semibold text-slate-900">Before you start</h2>
+            <p className="mt-3 whitespace-pre-line text-sm text-slate-700">
+              {assessment.jobContext}
+            </p>
+            <h3 className="mt-4 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <FileText className="h-3.5 w-3.5" aria-hidden />
+              Instructions
+            </h3>
+            <p className="mt-1 whitespace-pre-line text-sm text-slate-700">
+              {assessment.candidateInstructions}
+            </p>
+          </section>
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">Tasks</h2>
-        {assessment.tasks.map((task) => (
-          <article key={task.id} className="rounded-2xl border border-slate-200 bg-white p-6">
-            <header className="flex flex-wrap items-baseline justify-between gap-2">
-              <h3 className="font-semibold text-slate-900">
-                {task.position + 1}. {task.title}
-              </h3>
-              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                <span className="rounded-full bg-slate-100 px-2 py-0.5">
-                  {TASK_TYPE_LABELS[task.type] ?? task.type}
-                </span>
-                <span>{task.skillName}</span>
-                <span>·</span>
-                <span>{task.marks} marks</span>
-                <span>·</span>
-                <span>{task.timeMinutes} min</span>
+          <section className="rounded-2xl border border-slate-200 bg-white p-6">
+            <h2 className="text-lg font-semibold text-slate-900">What you will be asked</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              These are the topics. The tasks themselves open when you start, so you are not reading
+              questions before you are ready.
+            </p>
+            <ol className="mt-4 divide-y divide-slate-100">
+              {tasks.map((task, index) => (
+                <li
+                  key={task.id}
+                  className="flex flex-wrap items-center justify-between gap-2 py-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
+                      {index + 1}
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{task.skillName}</p>
+                      <p className="text-xs text-slate-500">
+                        {TASK_TYPE_LABELS[task.type] ?? task.type}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    {task.marks} marks · {task.timeMinutes} min
+                  </p>
+                </li>
+              ))}
+            </ol>
+          </section>
+        </>
+      ) : !questionsReady || !activeTask ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6">
+          <h2 className="text-lg font-semibold text-slate-900">Your attempt is started</h2>
+          <p className="mt-1 text-sm text-amber-900">
+            The tasks could not be loaded just now. Your saved answers are safe — load the tasks to
+            carry on.
+          </p>
+          <button
+            onClick={() => void reloadQuestions()}
+            disabled={reloadingQuestions}
+            className="mt-3 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-60"
+          >
+            {reloadingQuestions ? "Loading…" : "Load the tasks"}
+          </button>
+          {attemptError && <p className="mt-2 text-sm text-rose-700">{attemptError}</p>}
+        </section>
+      ) : (
+        <>
+          <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">
+                  {activeAttempt.status === "IN_PROGRESS" ? "Your attempt" : "Attempt submitted"}
+                </h2>
+                <p className="mt-1 max-w-2xl text-sm text-indigo-900">
+                  {activeAttempt.status === "IN_PROGRESS"
+                    ? "Saved answers are kept if you come back later; nothing is submitted until you submit."
+                    : `Your answers are saved and this attempt was submitted${
+                        activeAttempt.submittedAt
+                          ? ` on ${new Date(activeAttempt.submittedAt).toLocaleString()}`
+                          : ""
+                      }. It can no longer be changed.`}
+                </p>
+                <p className="mt-1 text-xs font-medium text-indigo-800">
+                  {savedCount} of {tasks.length} tasks saved
+                </p>
               </div>
-            </header>
-
-            <p className="mt-3 whitespace-pre-line text-sm text-slate-700">{task.prompt}</p>
-
-            {Object.keys(task.publicData).length > 0 && (
-              <div className="mt-4">
-                <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <Table2 className="h-3.5 w-3.5" aria-hidden />
-                  Data for this task
-                </h4>
-                <div className="mt-2">
-                  <DataPreview data={task.publicData} />
-                </div>
-              </div>
-            )}
-
-            <div className="mt-4">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                How this task is scored
-              </h4>
-              <table className="mt-2 w-full text-left text-sm">
-                <thead className="text-xs uppercase tracking-wide text-slate-500">
-                  <tr>
-                    <th scope="col" className="pb-1">
-                      Criterion
-                    </th>
-                    <th scope="col" className="pb-1">
-                      What is checked
-                    </th>
-                    <th scope="col" className="pb-1 text-right">
-                      Marks
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {task.rubric.map((criterion) => (
-                    <tr key={criterion.position}>
-                      <td className="py-2 pr-3 font-medium text-slate-800">{criterion.name}</td>
-                      <td className="py-2 pr-3 text-slate-600">{criterion.description}</td>
-                      <td className="py-2 text-right text-slate-700">{criterion.maxMarks}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {activeAttempt.status === "IN_PROGRESS" &&
+                (confirmingSubmit ? (
+                  <div className="rounded-xl border border-indigo-200 bg-white p-3">
+                    <p className="text-sm text-slate-700">
+                      Submit this attempt? Only saved answers are submitted, and answers cannot be
+                      changed afterwards.
+                    </p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <button
+                        onClick={() => void submitAttempt()}
+                        disabled={submitting}
+                        className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+                      >
+                        {submitting ? "Submitting…" : "Submit and lock"}
+                      </button>
+                      <button
+                        onClick={() => setConfirmingSubmit(false)}
+                        disabled={submitting}
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmingSubmit(true)}
+                    className="rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+                  >
+                    Submit attempt
+                  </button>
+                ))}
             </div>
+            {attemptError && <p className="mt-2 text-sm text-rose-700">{attemptError}</p>}
+          </section>
 
-            {activeAttempt && (
-              <div className="mt-4 border-t border-slate-100 pt-4">
+          <div className="grid gap-4 lg:grid-cols-[13rem_minmax(0,1fr)]">
+            <nav aria-label="Tasks" className="lg:sticky lg:top-4 lg:self-start">
+              <ol className="flex gap-2 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible lg:pb-0">
+                {tasks.map((task, index) => {
+                  const isActive = index === safeIndex;
+                  return (
+                    <li key={task.id} className="shrink-0 lg:shrink">
+                      <button
+                        type="button"
+                        onClick={() => setActiveIndex(index)}
+                        aria-current={isActive ? "step" : undefined}
+                        className={`flex w-40 items-center gap-2 rounded-xl border px-3 py-2 text-left lg:w-full ${
+                          isActive
+                            ? "border-indigo-500 bg-white shadow-sm"
+                            : "border-slate-200 bg-white/70 hover:border-slate-300"
+                        }`}
+                      >
+                        <span
+                          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                            isActive
+                              ? "bg-indigo-600 text-white"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {index + 1}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-xs font-semibold text-slate-900">
+                            Task {index + 1}
+                          </span>
+                          <span className="block truncate text-xs text-slate-500">
+                            {task.skillName}
+                          </span>
+                        </span>
+                        {savedTaskIds.has(task.id) && (
+                          <span
+                            className="ml-auto h-2 w-2 shrink-0 rounded-full bg-emerald-500"
+                            title="Answer saved"
+                          />
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
+            </nav>
+
+            <article className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
+              <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
+                Task {safeIndex + 1} of {tasks.length}
+              </p>
+              <h2 className="mt-1 text-2xl font-bold leading-tight text-slate-900">
+                {activeTask.title ?? `Task ${safeIndex + 1}`}
+              </h2>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                <span className="rounded-full bg-slate-100 px-2 py-0.5">
+                  {TASK_TYPE_LABELS[activeTask.type] ?? activeTask.type}
+                </span>
+                <span>{activeTask.skillName}</span>
+                <span>·</span>
+                <span>{activeTask.marks} marks</span>
+                <span>·</span>
+                <span>{activeTask.timeMinutes} min</span>
+              </div>
+
+              <p className="mt-5 whitespace-pre-line text-[15px] leading-relaxed text-slate-800">
+                {activeTask.prompt}
+              </p>
+
+              {Object.keys(activeTask.publicData).length > 0 && (
+                <div className="mt-5">
+                  <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <Table2 className="h-3.5 w-3.5" aria-hidden />
+                    Data for this task
+                  </h3>
+                  <div className="mt-2">
+                    <DataPreview data={activeTask.publicData} />
+                  </div>
+                </div>
+              )}
+
+              {activeTask.rubric.length > 0 && (
+                <details className="mt-5 rounded-xl border border-slate-200">
+                  <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm font-medium text-slate-700">
+                    How this task is scored
+                    <span className="text-xs font-normal text-slate-500">
+                      {activeTask.rubric.length} criteria · {activeTask.marks} marks
+                    </span>
+                  </summary>
+                  <div className="border-t border-slate-100 px-4 py-3">
+                    <table className="w-full text-left text-sm">
+                      <thead className="text-xs uppercase tracking-wide text-slate-500">
+                        <tr>
+                          <th scope="col" className="pb-1">
+                            Criterion
+                          </th>
+                          <th scope="col" className="pb-1">
+                            What is checked
+                          </th>
+                          <th scope="col" className="pb-1 text-right">
+                            Marks
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {activeTask.rubric.map((criterion) => (
+                          <tr key={criterion.position}>
+                            <td className="py-2 pr-3 font-medium text-slate-800">
+                              {criterion.name}
+                            </td>
+                            <td className="py-2 pr-3 text-slate-600">{criterion.description}</td>
+                            <td className="py-2 text-right text-slate-700">
+                              {criterion.maxMarks}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              )}
+
+              <div className="mt-6 border-t border-slate-100 pt-5">
                 <label
-                  htmlFor={`answer-${task.id}`}
-                  className="text-xs font-semibold uppercase tracking-wide text-slate-500"
+                  htmlFor={`answer-${activeTask.id}`}
+                  className="text-sm font-semibold text-slate-900"
                 >
                   Your answer
                 </label>
-                {task.type === "FILE_SUBMISSION" ? (
-                  <p className="mt-2 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {activeAttempt.status === "IN_PROGRESS"
+                    ? "Your text stays here while you switch tasks. Press Save answer to keep it."
+                    : "This attempt is submitted, so the answer is read-only."}
+                </p>
+                {activeTask.type === "FILE_SUBMISSION" ? (
+                  <p className="mt-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
                     File upload answers are not available yet.
                   </p>
                 ) : (
                   <>
                     <textarea
-                      id={`answer-${task.id}`}
-                      rows={5}
-                      value={drafts[task.id] ?? ""}
+                      id={`answer-${activeTask.id}`}
+                      rows={12}
+                      value={drafts[activeTask.id] ?? ""}
                       readOnly={activeAttempt.status !== "IN_PROGRESS"}
                       onChange={(event) =>
-                        setDrafts((prev) => ({ ...prev, [task.id]: event.target.value }))
+                        setDrafts((prev) => ({ ...prev, [activeTask.id]: event.target.value }))
                       }
                       placeholder="Type your answer here"
-                      className="mt-2 w-full rounded-lg border border-slate-300 p-2 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none"
+                      className="mt-2 w-full rounded-xl border border-slate-300 p-3 text-sm leading-relaxed text-slate-800 focus:border-indigo-500 focus:outline-none"
                     />
-                    {activeAttempt.status === "IN_PROGRESS" && (
-                      <div className="mt-2 flex items-center gap-3">
+                    <div className="mt-2 flex flex-wrap items-center gap-3">
+                      {activeAttempt.status === "IN_PROGRESS" && (
                         <button
-                          onClick={() => void saveAnswer(task.id)}
-                          disabled={savingTaskId === task.id}
+                          onClick={() => void saveAnswer(activeTask.id)}
+                          disabled={savingTaskId === activeTask.id}
                           className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
                         >
-                          {savingTaskId === task.id ? "Saving…" : "Save answer"}
+                          {savingTaskId === activeTask.id ? "Saving…" : "Save answer"}
                         </button>
-                        {savedTaskId === task.id && (
-                          <span className="text-xs text-emerald-700">Saved</span>
-                        )}
-                      </div>
-                    )}
+                      )}
+                      {savedTaskId === activeTask.id && (
+                        <span className="text-xs text-emerald-700">Saved</span>
+                      )}
+                      <span className="ml-auto text-xs text-slate-400">
+                        {(drafts[activeTask.id] ?? "").length} characters
+                      </span>
+                    </div>
                   </>
                 )}
               </div>
-            )}
-          </article>
-        ))}
-      </section>
+
+              <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setActiveIndex(Math.max(0, safeIndex - 1))}
+                  disabled={safeIndex === 0}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                >
+                  <ArrowLeft className="h-4 w-4" aria-hidden />
+                  Previous
+                </button>
+                <span className="text-xs text-slate-500">
+                  {safeIndex + 1} / {tasks.length}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveIndex(Math.min(tasks.length - 1, safeIndex + 1))}
+                  disabled={safeIndex >= tasks.length - 1}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-40"
+                >
+                  Next
+                  <ArrowRight className="h-4 w-4" aria-hidden />
+                </button>
+              </div>
+            </article>
+          </div>
+        </>
+      )}
     </DashboardLayout>
   );
 }

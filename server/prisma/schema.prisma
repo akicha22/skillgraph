@@ -162,10 +162,12 @@ model AssessmentAttempt {
   status      String               @default("IN_PROGRESS") // IN_PROGRESS | SUBMITTED
   startedAt   DateTime             @default(now())
   submittedAt DateTime?
+  reviewedAt  DateTime? // set once every rubric criterion has been scored
   updatedAt   DateTime             @updatedAt
   version     AssessmentVersion    @relation(fields: [versionId], references: [id], onDelete: Cascade)
   candidate   User                 @relation(fields: [candidateId], references: [id], onDelete: Cascade)
   responses   AssessmentResponse[]
+  criterionScores AssessmentCriterionScore[]
 
   // One attempt per candidate per version keeps answers from splitting across duplicates.
   @@unique([versionId, candidateId])
@@ -193,8 +195,23 @@ model AssessmentRubricCriterion {
   maxMarks        Int // candidate-visible
   privateGuidance String // evaluator-only
   task            AssessmentTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  scores          AssessmentCriterionScore[]
 
   @@unique([taskId, position])
+}
+
+// A recruiter's marks for one criterion of one submitted attempt.
+model AssessmentCriterionScore {
+  id          String                    @id @default(cuid())
+  attemptId   String
+  criterionId String
+  marks       Int
+  updatedAt   DateTime                  @default(now()) @updatedAt
+  attempt     AssessmentAttempt         @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  criterion   AssessmentRubricCriterion @relation(fields: [criterionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, criterionId])
+  @@index([criterionId])
 }
 
 model AuditLog {

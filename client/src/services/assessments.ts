@@ -2,6 +2,7 @@ import { api } from "./api";
 import type {
   AssessmentList,
   CandidateAssessmentDetail,
+  CriterionScoreInput,
   CandidateAssessmentList,
   CandidateAttempt,
   CandidateAttemptLookup,
@@ -64,6 +65,11 @@ export function listSubmissions(versionId: string) {
 /** One candidate's submitted answers, with the criteria they are scored against. */
 export function getSubmission(attemptId: string) {
   return api.get<SubmissionDetail>(`/recruiter/attempts/${attemptId}`);
+}
+
+/** Saves marks per criterion and returns the submission with its new total. */
+export function saveSubmissionScores(attemptId: string, scores: CriterionScoreInput[]) {
+  return api.put<SubmissionDetail>(`/recruiter/attempts/${attemptId}/scores`, { scores });
 }
 
 /** The published version a candidate opens; private data is stripped on the server. */
