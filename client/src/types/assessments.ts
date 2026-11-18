@@ -232,6 +232,36 @@ export type CandidateTask = {
   rubric: CandidateCriterion[];
 };
 
+export type CandidateAssessmentSummary = {
+  id: string;
+  title: string;
+  companyName: string;
+  jobTitle: string;
+  durationMinutes: number;
+  taskCount: number;
+};
+
+/** `GET /candidate/assessments` — every published version a candidate can open. */
+export type CandidateAssessmentList = { assessments: CandidateAssessmentSummary[] };
+
+export type CandidateAttemptStatus = "IN_PROGRESS" | "SUBMITTED";
+
+export type CandidateResponse = {
+  taskId: string;
+  answer: string;
+  savedAt: string;
+};
+
+/** `GET /candidate/attempts/:attemptId` and the start response. */
+export type CandidateAttempt = {
+  id: string;
+  versionId: string;
+  status: CandidateAttemptStatus;
+  startedAt: string;
+  submittedAt: string | null;
+  responses: CandidateResponse[];
+};
+
 /** `GET /candidate/assessments/:versionId` — a published version as the candidate sees it. */
 export type CandidateAssessmentDetail = {
   title: string;

@@ -85,6 +85,35 @@ function serializeCandidateVersion(version: CandidateVersionRecord) {
   };
 }
 
+// The published versions a candidate can open, newest first; drafts never appear here.
+candidateAssessmentsRouter.get(
+  "/",
+  asyncHandler(async (_req, res) => {
+    const versions = await prisma.assessmentVersion.findMany({
+      where: { status: "PUBLISHED" },
+      orderBy: { publishedAt: "desc" },
+      select: {
+        id: true,
+        title: true,
+        durationMinutes: true,
+        assessment: { select: { jobTitle: true, companyName: true } },
+        _count: { select: { tasks: true } },
+      },
+    });
+
+    res.json({
+      assessments: versions.map((version) => ({
+        id: version.id,
+        title: version.title,
+        companyName: version.assessment.companyName,
+        jobTitle: version.assessment.jobTitle,
+        durationMinutes: version.durationMinutes,
+        taskCount: version._count.tasks,
+      })),
+    });
+  }),
+);
+
 // Published versions only: a recruiter's draft is never readable from the candidate side.
 candidateAssessmentsRouter.get(
   "/:versionId",

@@ -2,6 +2,9 @@ import { api } from "./api";
 import type {
   AssessmentList,
   CandidateAssessmentDetail,
+  CandidateAssessmentList,
+  CandidateAttempt,
+  CandidateResponse,
   DraftUpdateRequest,
   DraftVersion,
   GenerateRequest,
@@ -53,4 +56,19 @@ export function createNewVersion(assessmentId: string, versionId: string) {
 /** The published version a candidate opens; private data is stripped on the server. */
 export function getCandidateAssessment(versionId: string) {
   return api.get<CandidateAssessmentDetail>(`/candidate/assessments/${versionId}`);
+}
+
+/** Every published assessment a candidate can open. */
+export function listCandidateAssessments() {
+  return api.get<CandidateAssessmentList>("/candidate/assessments");
+}
+
+/** Starts the candidate's attempt on a published version, or resumes the one they already have. */
+export function startCandidateAttempt(versionId: string) {
+  return api.post<CandidateAttempt>("/candidate/attempts", { versionId });
+}
+
+/** Saves one task's answer, replacing any earlier draft of it. */
+export function saveCandidateAnswer(attemptId: string, taskId: string, answer: string) {
+  return api.put<CandidateResponse>(`/candidate/attempts/${attemptId}/responses/${taskId}`, { answer });
 }
