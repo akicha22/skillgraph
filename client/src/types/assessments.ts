@@ -344,6 +344,34 @@ export type SubmissionDetail = {
   tasks: SubmissionTask[];
 };
 
+/** One candidate's per-skill marks inside a side-by-side comparison. */
+export type ComparisonSkill = {
+  skillId: string;
+  awarded: number;
+  possible: number;
+  scoredCriteria: number;
+  criterionCount: number;
+};
+
+export type ComparisonCandidate = {
+  attemptId: string;
+  candidate: { name: string; email: string };
+  submittedAt: string;
+  reviewedAt: string | null;
+  awarded: number;
+  possible: number;
+  scoredCriteria: number;
+  criterionCount: number;
+  skills: ComparisonSkill[];
+};
+
+/** `GET /recruiter/attempts/compare?attemptIds=` — two to four attempts of one version. */
+export type ComparisonDetail = {
+  version: { id: string; title: string; versionNumber: number };
+  skills: { skillId: string; name: string }[];
+  candidates: ComparisonCandidate[];
+};
+
 export type CandidateAssessmentSummary = {
   id: string;
   title: string;

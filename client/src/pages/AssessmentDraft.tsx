@@ -171,6 +171,8 @@ function DraftView({ assessmentId, versionId }: { assessmentId: string; versionI
   const [draft, setDraft] = useState<DraftVersion | null>(null);
   const [versions, setVersions] = useState<VersionList["versions"]>([]);
   const [submissions, setSubmissions] = useState<SubmissionList | null>(null);
+  // Recruiter-selected submissions for the side-by-side comparison.
+  const [selectedAttemptIds, setSelectedAttemptIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -236,6 +238,16 @@ function DraftView({ assessmentId, versionId }: { assessmentId: string; versionI
       return;
     }
     setActionError(err instanceof Error ? err.message : fallback);
+  }
+
+  function toggleSelected(attemptId: string) {
+    setSelectedAttemptIds((prev) =>
+      prev.includes(attemptId)
+        ? prev.filter((id) => id !== attemptId)
+        : prev.length >= 4
+          ? prev
+          : [...prev, attemptId],
+    );
   }
 
   async function publish() {
@@ -513,15 +525,34 @@ function DraftView({ assessmentId, versionId }: { assessmentId: string; versionI
                 </p>
               ) : (
                 <>
-                <p className="mt-1 text-xs text-slate-500">
-                  Sorted by marks. Only criteria you have marked count, so a score can still rise.
-                </p>
+                <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-slate-500">
+                    Sorted by marks. Only criteria you have marked count, so a score can still rise.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate(`/recruiter/compare?attempts=${selectedAttemptIds.join(",")}`)
+                    }
+                    disabled={selectedAttemptIds.length < 2}
+                    className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
+                  >
+                    Compare selected ({selectedAttemptIds.length})
+                  </button>
+                </div>
                 <ul className="mt-3 space-y-2 text-sm">
                   {rankedAttempts.map((attempt) => (
-                    <li key={attempt.id}>
+                    <li key={attempt.id} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${attempt.candidateName} for comparison`}
+                        checked={selectedAttemptIds.includes(attempt.id)}
+                        onChange={() => toggleSelected(attempt.id)}
+                        className="h-4 w-4 shrink-0 rounded border-slate-300"
+                      />
                       <Link
                         to={`/recruiter/attempts/${attempt.id}`}
-                        className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-slate-700 hover:bg-slate-50"
+                        className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-slate-700 hover:bg-slate-50"
                       >
                         <span>
                           <span className="font-medium text-slate-900">

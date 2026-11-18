@@ -337,6 +337,130 @@ recruiterAttemptsRouter.get(
   }),
 );
 
+// Two to four submitted attempts of the same version, aggregated per skill for a side-by-side
+// comparison. Only the owning recruiter can compare, and unmarked criteria are never counted.
+recruiterAttemptsRouter.get(
+  "/compare",
+  asyncHandler(async (req, res) => {
+    const raw = typeof req.query.attemptIds === "string" ? req.query.attemptIds : "";
+    const attemptIds = [...new Set(raw.split(",").map((id) => id.trim()).filter(Boolean))];
+    if (attemptIds.length < 2 || attemptIds.length > 4) {
+      res.status(400).json({ error: "Choose two to four submissions to compare" });
+      return;
+    }
+
+    const attempts = await prisma.assessmentAttempt.findMany({
+      where: {
+        id: { in: attemptIds },
+        status: "SUBMITTED",
+        version: { assessment: { ownerId: currentUser(res).id } },
+      },
+      select: {
+        id: true,
+        submittedAt: true,
+        reviewedAt: true,
+        candidate: { select: { name: true, email: true } },
+        criterionScores: { select: { criterionId: true, marks: true } },
+        version: {
+          select: {
+            id: true,
+            title: true,
+            versionNumber: true,
+            tasks: {
+              orderBy: { position: "asc" },
+              select: {
+                id: true,
+                skill: { select: { id: true, name: true } },
+                rubric: { select: { id: true, maxMarks: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (attempts.length !== attemptIds.length) {
+      res.status(404).json({ error: "One of those submissions was not found" });
+      return;
+    }
+    if (new Set(attempts.map((attempt) => attempt.version.id)).size !== 1) {
+      res.status(400).json({ error: "Only submissions of the same version can be compared" });
+      return;
+    }
+
+    const version = attempts[0].version;
+    const skills = new Map<string, { skillId: string; name: string }>();
+    for (const task of version.tasks) {
+      skills.set(task.skill.id, { skillId: task.skill.id, name: task.skill.name });
+    }
+
+    const byId = new Map(attempts.map((attempt) => [attempt.id, attempt]));
+    const candidates = attemptIds.map((attemptId) => {
+      const attempt = byId.get(attemptId)!;
+      const scoreByCriterion = new Map(
+        attempt.criterionScores.map((score) => [score.criterionId, score.marks]),
+      );
+
+      let awarded = 0;
+      let scoredCriteria = 0;
+      let criterionCount = 0;
+      const perSkill = new Map<
+        string,
+        {
+          skillId: string;
+          awarded: number;
+          possible: number;
+          scoredCriteria: number;
+          criterionCount: number;
+        }
+      >();
+
+      for (const task of attempt.version.tasks) {
+        for (const criterion of task.rubric) {
+          const marks = scoreByCriterion.get(criterion.id) ?? null;
+          criterionCount += 1;
+          if (marks !== null) {
+            scoredCriteria += 1;
+            awarded += marks;
+          }
+
+          const entry = perSkill.get(task.skill.id) ?? {
+            skillId: task.skill.id,
+            awarded: 0,
+            possible: 0,
+            scoredCriteria: 0,
+            criterionCount: 0,
+          };
+          entry.possible += criterion.maxMarks;
+          entry.criterionCount += 1;
+          if (marks !== null) {
+            entry.awarded += marks;
+            entry.scoredCriteria += 1;
+          }
+          perSkill.set(task.skill.id, entry);
+        }
+      }
+
+      return {
+        attemptId,
+        candidate: attempt.candidate,
+        submittedAt: attempt.submittedAt,
+        reviewedAt: attempt.reviewedAt,
+        awarded,
+        possible: [...perSkill.values()].reduce((sum, skill) => sum + skill.possible, 0),
+        scoredCriteria,
+        criterionCount,
+        skills: [...perSkill.values()],
+      };
+    });
+
+    res.json({
+      version: { id: version.id, title: version.title, versionNumber: version.versionNumber },
+      skills: [...skills.values()],
+      candidates,
+    });
+  }),
+);
+
 // One submitted attempt: the answers next to the criteria they are scored against.
 recruiterAttemptsRouter.get(
   "/:attemptId",

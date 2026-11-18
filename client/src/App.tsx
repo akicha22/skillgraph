@@ -11,6 +11,7 @@ import AssessmentWizard from "./components/AssessmentWizard";
 import AssessmentDraft from "./pages/AssessmentDraft";
 import CandidateAssessmentPage from "./pages/CandidateAssessment";
 import RecruiterSubmission from "./pages/RecruiterSubmission";
+import RecruiterCompare from "./pages/RecruiterCompare";
 
 export default function App() {
   return (
@@ -74,6 +75,14 @@ export default function App() {
             element={
               <ProtectedRoute role="RECRUITER">
                 <RecruiterSubmission />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recruiter/compare"
+            element={
+              <ProtectedRoute role="RECRUITER">
+                <RecruiterCompare />
               </ProtectedRoute>
             }
           />

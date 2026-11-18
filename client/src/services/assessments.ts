@@ -4,6 +4,7 @@ import type {
   CandidateAssessmentDetail,
   CriterionScoreInput,
   CandidateAssessmentList,
+  ComparisonDetail,
   CandidateAttempt,
   CandidateAttemptLookup,
   CandidateResponse,
@@ -65,6 +66,13 @@ export function listSubmissions(versionId: string) {
 /** One candidate's submitted answers, with the criteria they are scored against. */
 export function getSubmission(attemptId: string) {
   return api.get<SubmissionDetail>(`/recruiter/attempts/${attemptId}`);
+}
+
+/** Two to four submitted attempts of one version, aggregated per skill. */
+export function compareSubmissions(attemptIds: string[]) {
+  return api.get<ComparisonDetail>(
+    `/recruiter/attempts/compare?attemptIds=${encodeURIComponent(attemptIds.join(","))}`,
+  );
 }
 
 /** Saves marks per criterion and returns the submission with its new total. */
