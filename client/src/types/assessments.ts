@@ -131,6 +131,38 @@ export type DraftVersion = {
   totals: { marks: number; weights: number; durationMinutes: number; taskCount: number };
 };
 
+/** One rubric criterion as the recruiter may rewrite it (no position: the server re-indexes). */
+export type DraftCriterionUpdate = {
+  name: string;
+  description: string;
+  maxMarks: number;
+  privateGuidance: string;
+};
+
+/**
+ * `PATCH /:assessmentId/versions/:versionId`. Only changed fields are sent. If `tasks` is sent it
+ * must contain every task and its marks must total 100; omitting a task's `rubric` lets the server
+ * rescale the existing criteria to the new marks.
+ */
+export type DraftUpdateRequest = {
+  title?: string;
+  description?: string;
+  jobContext?: string;
+  candidateInstructions?: string;
+  difficulty?: AssessmentDifficulty;
+  targetLevel?: AssessmentLevel;
+  aiPolicy?: AiPolicy;
+  skills?: { skillSlug: string; weight: number }[];
+  tasks?: {
+    id: string;
+    title: string;
+    prompt: string;
+    marks: number;
+    timeMinutes: number;
+    rubric?: DraftCriterionUpdate[];
+  }[];
+};
+
 export type VersionSummary = {
   id: string;
   versionNumber: number;

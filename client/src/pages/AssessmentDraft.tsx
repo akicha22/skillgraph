@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Eye, FileText, Lock } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { AlertTriangle, ArrowLeft, Eye, FileText, GitBranch, Lock, Pencil, Send } from "lucide-react";
 import DashboardLayout from "../layouts/DashboardLayout";
-import { getDraft, listVersions } from "../services/assessments";
+import DraftEditForm from "../components/DraftEditForm";
+import { createNewVersion, getDraft, listVersions, publishVersion } from "../services/assessments";
+import { ApiError } from "../services/api";
 import {
   DIFFICULTY_LABELS,
   LEVEL_LABELS,
@@ -156,6 +158,11 @@ function DraftView({ assessmentId, versionId }: { assessmentId: string; versionI
   const [versions, setVersions] = useState<VersionList["versions"]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const [editing, setEditing] = useState(false);
+  const [busyAction, setBusyAction] = useState<"publish" | "new-version" | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionIssues, setActionIssues] = useState<{ field: string; message: string }[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -175,6 +182,61 @@ function DraftView({ assessmentId, versionId }: { assessmentId: string; versionI
       cancelled = true;
     };
   }, [assessmentId, versionId]);
+
+  function refreshVersions() {
+    listVersions(assessmentId)
+      .then((list) => setVersions(list.versions))
+      .catch(() => {
+        /* The version list is informational; a failed refresh must not hide the draft. */
+      });
+  }
+
+  function handleSaved(saved: DraftVersion) {
+    setDraft(saved);
+    setEditing(false);
+    setActionError(null);
+    setActionIssues([]);
+    refreshVersions();
+  }
+
+  function reportActionError(err: unknown, fallback: string) {
+    if (err instanceof ApiError) {
+      setActionError(err.message);
+      setActionIssues(err.details);
+      return;
+    }
+    setActionError(err instanceof Error ? err.message : fallback);
+  }
+
+  async function publish() {
+    setActionError(null);
+    setActionIssues([]);
+    setBusyAction("publish");
+    try {
+      const published = await publishVersion(assessmentId, versionId);
+      setDraft(published);
+      setEditing(false);
+      refreshVersions();
+    } catch (err) {
+      reportActionError(err, "Could not publish this version.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function startNewVersion() {
+    setActionError(null);
+    setActionIssues([]);
+    setBusyAction("new-version");
+    try {
+      const created = await createNewVersion(assessmentId, versionId);
+      navigate(`/recruiter/assessments/${created.assessmentId}/versions/${created.id}`);
+    } catch (err) {
+      reportActionError(err, "Could not create a new version.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
 
   if (loading) {
     return (
@@ -215,14 +277,75 @@ function DraftView({ assessmentId, versionId }: { assessmentId: string; versionI
             <h1 className="mt-1 text-2xl font-semibold text-slate-900">{draft.title}</h1>
             <p className="mt-2 text-sm text-slate-600">{draft.description}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge tone="neutral">{`Version ${draft.versionNumber}`}</StatusBadge>
-            <StatusBadge tone={draft.status === "PUBLISHED" ? "published" : "draft"}>
-              {draft.status === "PUBLISHED" ? "Published" : "Draft"}
-            </StatusBadge>
-            <StatusBadge tone="neutral">{METHOD_LABELS[draft.generationMethod] ?? draft.generationMethod}</StatusBadge>
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <StatusBadge tone="neutral">{`Version ${draft.versionNumber}`}</StatusBadge>
+              <StatusBadge tone={draft.status === "PUBLISHED" ? "published" : "draft"}>
+                {draft.status === "PUBLISHED" ? "Published" : "Draft"}
+              </StatusBadge>
+              <StatusBadge tone="neutral">
+                {METHOD_LABELS[draft.generationMethod] ?? draft.generationMethod}
+              </StatusBadge>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {draft.editable && !editing && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditing(true);
+                    setActionError(null);
+                    setActionIssues([]);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                >
+                  <Pencil className="h-4 w-4" aria-hidden />
+                  Edit draft
+                </button>
+              )}
+              {draft.editable && (
+                <button
+                  type="button"
+                  onClick={() => void publish()}
+                  disabled={busyAction !== null || editing}
+                  title={editing ? "Save or cancel your edits first" : undefined}
+                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  <Send className="h-4 w-4" aria-hidden />
+                  {busyAction === "publish" ? "Publishing…" : "Publish version"}
+                </button>
+              )}
+              {!draft.editable && (
+                <button
+                  type="button"
+                  onClick={() => void startNewVersion()}
+                  disabled={busyAction !== null}
+                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  <GitBranch className="h-4 w-4" aria-hidden />
+                  {busyAction === "new-version" ? "Creating…" : "Create new version"}
+                </button>
+              )}
+            </div>
           </div>
         </div>
+
+        {actionError && (
+          <div role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+            <p className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+              <span>{actionError}</span>
+            </p>
+            {actionIssues.length > 0 && (
+              <ul className="mt-2 list-disc space-y-1 pl-8">
+                {actionIssues.map((issue, index) => (
+                  <li key={`${issue.field}-${index}`}>
+                    <span className="font-medium">{issue.field}:</span> {issue.message}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         <dl className="mt-5 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
           <div className="rounded-xl bg-slate-50 p-3">
@@ -246,13 +369,17 @@ function DraftView({ assessmentId, versionId }: { assessmentId: string; versionI
         <p className="mt-4 flex items-start gap-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
           <Eye className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
           <span>
-            Read-only preview. Marks, minutes and rubrics are computed by the server; editing, publishing and new
-            versions come in the next step.
+            {draft.editable
+              ? "This version is a draft. Edit the wording, marks, minutes, rubric and weights, then publish to lock the criteria candidates will be scored against."
+              : `Published${draft.publishedAt ? ` on ${new Date(draft.publishedAt).toLocaleDateString()}` : ""} and read-only — attempts are scored against these exact criteria. Create a new version to make changes.`}
           </span>
         </p>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+        {editing ? (
+          <DraftEditForm draft={draft} onSaved={handleSaved} onCancel={() => setEditing(false)} />
+        ) : (
         <section className="space-y-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-6">
             <h2 className="text-lg font-semibold text-slate-900">Assessment brief</h2>
@@ -288,6 +415,7 @@ function DraftView({ assessmentId, versionId }: { assessmentId: string; versionI
             <TaskCard key={task.id} task={task} />
           ))}
         </section>
+        )}
 
         <aside className="space-y-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-6">
