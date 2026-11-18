@@ -22,16 +22,91 @@ const answerSchema = z.object({
     .max(MAX_ANSWER_CHARS, `Please keep an answer under ${MAX_ANSWER_CHARS} characters`),
 });
 
-type AttemptRecord = {
-  id: string;
-  versionId: string;
-  status: string;
-  startedAt: Date;
-  submittedAt: Date | null;
-  responses: { taskId: string; answer: string; savedAt: Date }[];
-};
+/**
+ * The candidate reads their own attempt, its answers and — once scored — the marks per criterion.
+ * Only criterion names, limits and awarded marks are selected: privateGuidance (the marking notes
+ * and answer key) and privateData are never loaded here.
+ */
+function findAttempt(attemptId: string, candidateId: string) {
+  return prisma.assessmentAttempt.findFirst({
+    where: { id: attemptId, candidateId },
+    select: {
+      id: true,
+      versionId: true,
+      status: true,
+      startedAt: true,
+      submittedAt: true,
+      reviewedAt: true,
+      responses: {
+        orderBy: { savedAt: "asc" },
+        select: { taskId: true, answer: true, savedAt: true },
+      },
+      criterionScores: { select: { criterionId: true, marks: true } },
+      version: {
+        select: {
+          tasks: {
+            orderBy: { position: "asc" },
+            select: {
+              id: true,
+              position: true,
+              marks: true,
+              rubric: {
+                orderBy: { position: "asc" },
+                select: { id: true, position: true, name: true, maxMarks: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+}
 
-/** The attempt's own fields plus its saved answers; tasks are read from the assessment itself. */
+type AttemptRecord = NonNullable<Awaited<ReturnType<typeof findAttempt>>>;
+
+/** The rubric's marks for this attempt, per criterion and summed over the assessment. */
+function buildResult(attempt: AttemptRecord) {
+  const scoreByCriterion = new Map(
+    attempt.criterionScores.map((score) => [score.criterionId, score.marks]),
+  );
+
+  let awarded = 0;
+  let possible = 0;
+  let scoredCriteria = 0;
+  let criterionCount = 0;
+
+  const criteria = attempt.version.tasks.flatMap((task) => {
+    possible += task.marks;
+    return task.rubric.map((criterion) => {
+      const marks = scoreByCriterion.get(criterion.id) ?? null;
+      criterionCount += 1;
+      if (marks !== null) {
+        scoredCriteria += 1;
+        awarded += marks;
+      }
+      return {
+        criterionId: criterion.id,
+        taskId: task.id,
+        position: criterion.position,
+        name: criterion.name,
+        maxMarks: criterion.maxMarks,
+        awarded: marks,
+        taskMarks: task.marks,
+      };
+    });
+  });
+
+  return {
+    awarded,
+    possible,
+    scoredCriteria,
+    criterionCount,
+    reviewedAt: attempt.reviewedAt,
+    criteria,
+  };
+}
+
+/** The attempt's own fields, its saved answers, and its result once it is submitted. */
 function serializeAttempt(attempt: AttemptRecord) {
   return {
     id: attempt.id,
@@ -39,19 +114,22 @@ function serializeAttempt(attempt: AttemptRecord) {
     status: attempt.status,
     startedAt: attempt.startedAt,
     submittedAt: attempt.submittedAt,
+    reviewedAt: attempt.reviewedAt,
     responses: attempt.responses.map((response) => ({
       taskId: response.taskId,
       answer: response.answer,
       savedAt: response.savedAt,
     })),
+    // A half-marked attempt still reports the marks that exist; the page says marking continues.
+    result: attempt.status === "SUBMITTED" ? buildResult(attempt) : null,
   };
 }
 
-function findAttempt(attemptId: string, candidateId: string) {
-  return prisma.assessmentAttempt.findFirst({
-    where: { id: attemptId, candidateId },
-    include: { responses: { orderBy: { savedAt: "asc" } } },
-  });
+/** Reads a known attempt and serializes it; every caller passes an id it just resolved itself. */
+async function attemptDetail(attemptId: string, candidateId: string) {
+  const attempt = await findAttempt(attemptId, candidateId);
+  if (!attempt) throw new Error("Attempt disappeared while it was being read");
+  return serializeAttempt(attempt);
 }
 
 function isUniqueConstraintError(err: unknown): boolean {
@@ -81,28 +159,28 @@ candidateAttemptsRouter.post(
     const candidateId = currentUser(res).id;
     const existing = await prisma.assessmentAttempt.findUnique({
       where: { versionId_candidateId: { versionId, candidateId } },
-      include: { responses: { orderBy: { savedAt: "asc" } } },
+      select: { id: true },
     });
     if (existing) {
-      res.json(serializeAttempt(existing));
+      res.json(await attemptDetail(existing.id, candidateId));
       return;
     }
 
     try {
       const created = await prisma.assessmentAttempt.create({
         data: { versionId, candidateId },
-        include: { responses: true },
+        select: { id: true },
       });
-      res.status(201).json(serializeAttempt(created));
+      res.status(201).json(await attemptDetail(created.id, candidateId));
     } catch (err) {
       // Two tabs can start at once; the unique pair means one wins and the other resumes it.
       if (!isUniqueConstraintError(err)) throw err;
       const attempt = await prisma.assessmentAttempt.findUnique({
         where: { versionId_candidateId: { versionId, candidateId } },
-        include: { responses: { orderBy: { savedAt: "asc" } } },
+        select: { id: true },
       });
       if (!attempt) throw err;
-      res.json(serializeAttempt(attempt));
+      res.json(await attemptDetail(attempt.id, candidateId));
     }
   }),
 );
@@ -118,10 +196,12 @@ candidateAttemptsRouter.get(
       return;
     }
 
-    const attempt = await prisma.assessmentAttempt.findUnique({
-      where: { versionId_candidateId: { versionId, candidateId: currentUser(res).id } },
-      include: { responses: { orderBy: { savedAt: "asc" } } },
+    const candidateId = currentUser(res).id;
+    const found = await prisma.assessmentAttempt.findUnique({
+      where: { versionId_candidateId: { versionId, candidateId } },
+      select: { id: true },
     });
+    const attempt = found ? await findAttempt(found.id, candidateId) : null;
 
     res.json({ attempt: attempt ? serializeAttempt(attempt) : null });
   }),

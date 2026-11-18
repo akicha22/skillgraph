@@ -17,6 +17,12 @@ import {
   type VersionList,
 } from "../types/assessments";
 
+/** Turns a stored field name (e.g. `total_revenue`) into a label a person reads. */
+function humanize(key: string): string {
+  const spaced = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/_/g, " ").trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
 function StatusBadge({ children, tone }: { children: string; tone: "draft" | "published" | "neutral" }) {
   const classes =
     tone === "published"
@@ -112,7 +118,36 @@ function TaskCard({ task }: { task: DraftTask }) {
             label="Recruiter only — answer key and marking guidance"
             icon={<Lock className="h-3.5 w-3.5 shrink-0" aria-hidden />}
           >
-            <pre className="overflow-x-auto text-xs text-slate-700">{JSON.stringify(task.privateData, null, 2)}</pre>
+            <div className="space-y-3">
+              {Object.entries(task.privateData)
+                .filter(([key]) => key !== "rubric")
+                .map(([key, value]) =>
+                  typeof value === "object" && value !== null && !Array.isArray(value) ? (
+                    <div key={key}>
+                      <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {humanize(key)}
+                      </h5>
+                      <table className="mt-1 w-full text-left text-sm">
+                        <tbody className="divide-y divide-slate-100">
+                          {Object.entries(value as Record<string, unknown>).map(([name, expected]) => (
+                            <tr key={name}>
+                              <td className="py-1.5 pr-3 text-slate-700">{humanize(name)}</td>
+                              <td className="py-1.5 font-medium text-slate-900">
+                                {Array.isArray(expected) ? expected.join(", ") : String(expected)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p key={key} className="text-sm text-slate-700">
+                      <span className="font-medium">{humanize(key)}:</span>{" "}
+                      {Array.isArray(value) ? value.join(", ") : String(value)}
+                    </p>
+                  ),
+                )}
+            </div>
             {task.rubric.some((criterion) => criterion.privateGuidance) && (
               <ul className="mt-2 space-y-1 text-xs text-slate-600">
                 {task.rubric

@@ -320,6 +320,28 @@ export type CandidateResponse = {
   savedAt: string;
 };
 
+/** One rubric criterion's marks on the candidate's own attempt; marking notes are never sent. */
+export type CandidateCriterionResult = {
+  criterionId: string;
+  taskId: string;
+  position: number;
+  name: string;
+  maxMarks: number;
+  /** Null until that criterion has been marked. */
+  awarded: number | null;
+  taskMarks: number;
+};
+
+/** The candidate's own result, present only once the attempt is submitted. */
+export type CandidateResult = {
+  awarded: number;
+  possible: number;
+  scoredCriteria: number;
+  criterionCount: number;
+  reviewedAt: string | null;
+  criteria: CandidateCriterionResult[];
+};
+
 /** `GET /candidate/attempts/:attemptId` and the start response. */
 export type CandidateAttempt = {
   id: string;
@@ -327,7 +349,10 @@ export type CandidateAttempt = {
   status: CandidateAttemptStatus;
   startedAt: string;
   submittedAt: string | null;
+  reviewedAt: string | null;
   responses: CandidateResponse[];
+  /** Null until the attempt is submitted; from then on it carries the marks per criterion. */
+  result: CandidateResult | null;
 };
 
 /** `GET /candidate/attempts?versionId=` — the candidate's attempt on a version, if any. */

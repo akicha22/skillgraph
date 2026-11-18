@@ -207,6 +207,21 @@ export default function CandidateAssessmentPage() {
   );
   const savedCount = savedTaskIds.size;
   const questionsReady = assessment.started;
+  // Marks arrive only once the attempt is submitted; nothing here is marking guidance.
+  const result = activeAttempt?.status === "SUBMITTED" ? activeAttempt.result : null;
+  const awardedByCriterion = new Map(
+    (result?.criteria ?? []).map((row) => [`${row.taskId}:${row.position}`, row.awarded] as const),
+  );
+  const awardedForTask = (taskId: string) => {
+    const rows = result?.criteria.filter((row) => row.taskId === taskId) ?? [];
+    const scored = rows.filter((row) => row.awarded !== null);
+    if (scored.length === 0) return null;
+    return {
+      awarded: scored.reduce((sum, row) => sum + (row.awarded ?? 0), 0),
+      scored: scored.length,
+      count: rows.length,
+    };
+  };
 
   return (
     <DashboardLayout>
@@ -330,7 +345,11 @@ export default function CandidateAssessmentPage() {
                         activeAttempt.submittedAt
                           ? ` on ${new Date(activeAttempt.submittedAt).toLocaleString()}`
                           : ""
-                      }. It can no longer be changed.`}
+                      }. It can no longer be changed.${
+                        result && result.scoredCriteria > 0
+                          ? " Your marks are shown below."
+                          : " No marks have been given yet; they will appear below once marking starts."
+                      }`}
                 </p>
                 <p className="mt-1 text-xs font-medium text-indigo-800">
                   {savedCount} of {tasks.length} tasks saved
@@ -371,6 +390,42 @@ export default function CandidateAssessmentPage() {
             </div>
             {attemptError && <p className="mt-2 text-sm text-rose-700">{attemptError}</p>}
           </section>
+
+          {result && result.scoredCriteria > 0 && (
+            <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6">
+              <h2 className="text-base font-semibold text-slate-900">Your result</h2>
+              <p className="mt-1 text-3xl font-bold text-slate-900">
+                {result.awarded}
+                <span className="ml-1.5 text-base font-medium text-emerald-900">
+                  out of {result.possible} marks
+                </span>
+              </p>
+              <p className="mt-1 text-sm text-emerald-900">
+                {result.scoredCriteria} of {result.criterionCount} criteria marked
+                {result.reviewedAt ? " — marking is complete." : " so far; more may follow."}
+              </p>
+              <ul className="mt-3 divide-y divide-emerald-200/70 text-sm">
+                {tasks.map((task, index) => {
+                  const taskResult = awardedForTask(task.id);
+                  if (!taskResult) return null;
+                  return (
+                    <li key={task.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2">
+                      <span className="text-slate-800">
+                        Task {index + 1}: {task.title ?? task.skillName}
+                      </span>
+                      <span className="text-xs font-medium text-emerald-900">
+                        {taskResult.awarded} / {task.marks} marks · {taskResult.scored} of{" "}
+                        {taskResult.count} criteria
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="mt-2 text-xs text-emerald-900">
+                Each task's rubric below shows what was awarded for each criterion.
+              </p>
+            </section>
+          )}
 
           <div className="grid gap-4 lg:grid-cols-[13rem_minmax(0,1fr)]">
             <nav aria-label="Tasks" className="lg:sticky lg:top-4 lg:self-start">
@@ -459,6 +514,9 @@ export default function CandidateAssessmentPage() {
                     How this task is scored
                     <span className="text-xs font-normal text-slate-500">
                       {activeTask.rubric.length} criteria · {activeTask.marks} marks
+                      {awardedForTask(activeTask.id)
+                        ? ` · you scored ${awardedForTask(activeTask.id)?.awarded}`
+                        : ""}
                     </span>
                   </summary>
                   <div className="border-t border-slate-100 px-4 py-3">
@@ -474,6 +532,11 @@ export default function CandidateAssessmentPage() {
                           <th scope="col" className="pb-1 text-right">
                             Marks
                           </th>
+                          {result && (
+                            <th scope="col" className="pb-1 pl-3 text-right">
+                              Your marks
+                            </th>
+                          )}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -486,6 +549,11 @@ export default function CandidateAssessmentPage() {
                             <td className="py-2 text-right text-slate-700">
                               {criterion.maxMarks}
                             </td>
+                            {result && (
+                              <td className="py-2 pl-3 text-right font-medium text-slate-900">
+                                {awardedByCriterion.get(`${activeTask.id}:${criterion.position}`) ?? "—"}
+                              </td>
+                            )}
                           </tr>
                         ))}
                       </tbody>
