@@ -23,8 +23,6 @@ function parseData(value: string): Record<string, unknown> {
 }
 
 type CandidateVersionRecord = {
-  id: string;
-  versionNumber: number;
   title: string;
   description: string;
   jobContext: string;
@@ -33,9 +31,7 @@ type CandidateVersionRecord = {
   difficulty: string;
   aiPolicy: string;
   durationMinutes: number;
-  publishedAt: Date | null;
   assessment: { jobTitle: string; companyName: string };
-  skills: { weight: number; skill: { name: string } }[];
   tasks: {
     id: string;
     position: number;
@@ -53,29 +49,10 @@ type CandidateVersionRecord = {
 /**
  * Builds the candidate's view from an allowlist, so privateData, privateGuidance, the answer
  * key and the recruiter's brief can never reach a candidate by being spread in by mistake.
+ * Only fields the candidate page renders are included.
  */
 function serializeCandidateVersion(version: CandidateVersionRecord) {
-  const tasks = version.tasks.map((task) => ({
-    id: task.id,
-    position: task.position,
-    type: task.type,
-    skillName: task.skill.name,
-    title: task.title,
-    prompt: task.prompt,
-    marks: task.marks,
-    timeMinutes: task.timeMinutes,
-    publicData: parseData(task.publicData),
-    rubric: task.rubric.map((criterion) => ({
-      position: criterion.position,
-      name: criterion.name,
-      description: criterion.description,
-      maxMarks: criterion.maxMarks,
-    })),
-  }));
-
   return {
-    id: version.id,
-    versionNumber: version.versionNumber,
     title: version.title,
     description: version.description,
     jobContext: version.jobContext,
@@ -84,18 +61,27 @@ function serializeCandidateVersion(version: CandidateVersionRecord) {
     difficulty: version.difficulty,
     aiPolicy: version.aiPolicy,
     durationMinutes: version.durationMinutes,
-    publishedAt: version.publishedAt,
     assessment: {
       jobTitle: version.assessment.jobTitle,
       companyName: version.assessment.companyName,
     },
-    skills: version.skills.map((row) => ({ name: row.skill.name, weight: row.weight })),
-    tasks,
-    totals: {
-      marks: tasks.reduce((sum, task) => sum + task.marks, 0),
-      durationMinutes: tasks.reduce((sum, task) => sum + task.timeMinutes, 0),
-      taskCount: tasks.length,
-    },
+    tasks: version.tasks.map((task) => ({
+      id: task.id,
+      position: task.position,
+      type: task.type,
+      skillName: task.skill.name,
+      title: task.title,
+      prompt: task.prompt,
+      marks: task.marks,
+      timeMinutes: task.timeMinutes,
+      publicData: parseData(task.publicData),
+      rubric: task.rubric.map((criterion) => ({
+        position: criterion.position,
+        name: criterion.name,
+        description: criterion.description,
+        maxMarks: criterion.maxMarks,
+      })),
+    })),
   };
 }
 
@@ -107,7 +93,6 @@ candidateAssessmentsRouter.get(
       where: { id: routeParam(req.params.versionId), status: "PUBLISHED" },
       include: {
         assessment: true,
-        skills: { include: { skill: true }, orderBy: { weight: "desc" } },
         tasks: {
           orderBy: { position: "asc" },
           include: { skill: true, rubric: { orderBy: { position: "asc" } } },

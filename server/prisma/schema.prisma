@@ -18,6 +18,7 @@ model User {
   updatedAt    DateTime @updatedAt
   candidateSkills CandidateSkill[]
   assessments Assessment[]
+  attempts    AssessmentAttempt[]
   auditLogs   AuditLog[]
 }
 model SkillDomain {
@@ -111,6 +112,7 @@ model AssessmentVersion {
   publishedAt           DateTime?
   skills                AssessmentVersionSkill[]
   tasks                 AssessmentTask[]
+  attempts              AssessmentAttempt[]
   createdAt             DateTime                 @default(now())
   updatedAt             DateTime                 @updatedAt
 
@@ -147,9 +149,39 @@ model AssessmentTask {
   version     AssessmentVersion           @relation(fields: [versionId], references: [id], onDelete: Cascade)
   skill       Skill                       @relation(fields: [skillId], references: [id])
   rubric      AssessmentRubricCriterion[]
+  responses   AssessmentResponse[]
 
   @@unique([versionId, position])
   @@index([skillId])
+}
+
+model AssessmentAttempt {
+  id          String               @id @default(cuid())
+  versionId   String
+  candidateId String
+  status      String               @default("IN_PROGRESS") // IN_PROGRESS | SUBMITTED
+  startedAt   DateTime             @default(now())
+  submittedAt DateTime?
+  updatedAt   DateTime             @updatedAt
+  version     AssessmentVersion    @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  candidate   User                 @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  responses   AssessmentResponse[]
+
+  // One attempt per candidate per version keeps answers from splitting across duplicates.
+  @@unique([versionId, candidateId])
+  @@index([candidateId])
+}
+
+model AssessmentResponse {
+  id        String            @id @default(cuid())
+  attemptId String
+  taskId    String
+  answer    String            @default("")
+  savedAt   DateTime          @default(now()) @updatedAt
+  attempt   AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  task      AssessmentTask    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, taskId])
 }
 
 model AssessmentRubricCriterion {

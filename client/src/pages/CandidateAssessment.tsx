@@ -70,6 +70,8 @@ export default function CandidateAssessmentPage() {
     );
   }
 
+  const totalMarks = assessment.tasks.reduce((sum, task) => sum + task.marks, 0);
+
   return (
     <DashboardLayout>
       <section className="rounded-2xl border border-slate-200 bg-white p-6">
@@ -80,9 +82,9 @@ export default function CandidateAssessmentPage() {
         <p className="mt-2 text-sm text-slate-600">{assessment.description}</p>
         <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-600">
           <span className="rounded-full bg-slate-100 px-2.5 py-0.5">
-            {assessment.totals.taskCount} tasks
+            {assessment.tasks.length} tasks
           </span>
-          <span className="rounded-full bg-slate-100 px-2.5 py-0.5">{assessment.totals.marks} marks</span>
+          <span className="rounded-full bg-slate-100 px-2.5 py-0.5">{totalMarks} marks</span>
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5">
             <Clock className="h-3.5 w-3.5" aria-hidden />
             {assessment.durationMinutes} min

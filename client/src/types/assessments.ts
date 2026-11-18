@@ -234,8 +234,6 @@ export type CandidateTask = {
 
 /** `GET /candidate/assessments/:versionId` — a published version as the candidate sees it. */
 export type CandidateAssessmentDetail = {
-  id: string;
-  versionNumber: number;
   title: string;
   description: string;
   jobContext: string;
@@ -244,9 +242,6 @@ export type CandidateAssessmentDetail = {
   difficulty: AssessmentDifficulty;
   aiPolicy: AiPolicy;
   durationMinutes: number;
-  publishedAt: string | null;
   assessment: { jobTitle: string; companyName: string };
-  skills: { name: string; weight: number }[];
   tasks: CandidateTask[];
-  totals: { marks: number; durationMinutes: number; taskCount: number };
 };
