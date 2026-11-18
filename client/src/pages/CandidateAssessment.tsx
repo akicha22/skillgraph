@@ -5,8 +5,10 @@ import DashboardLayout from "../layouts/DashboardLayout";
 import DataPreview from "../components/DataPreview";
 import {
   getCandidateAssessment,
+  getCandidateAttempt,
   saveCandidateAnswer,
   startCandidateAttempt,
+  submitCandidateAttempt,
 } from "../services/assessments";
 import { ApiError } from "../services/api";
 import {
@@ -23,11 +25,15 @@ export default function CandidateAssessmentPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [attempt, setAttempt] = useState<CandidateAttempt | null>(null);
+  // Which version the loaded attempt belongs to, so a switch never shows another one's answers.
+  const [attemptVersionId, setAttemptVersionId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [starting, setStarting] = useState(false);
   const [savingTaskId, setSavingTaskId] = useState<string | null>(null);
   const [savedTaskId, setSavedTaskId] = useState<string | null>(null);
   const [attemptError, setAttemptError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [confirmingSubmit, setConfirmingSubmit] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,6 +57,31 @@ export default function CandidateAssessmentPage() {
     };
   }, [versionId]);
 
+  // Opens in the attempt's real state instead of pretending nothing was started yet.
+  useEffect(() => {
+    let cancelled = false;
+    getCandidateAttempt(versionId)
+      .then(({ attempt: existing }) => {
+        if (cancelled) return;
+        setAttempt(existing);
+        setDrafts(
+          existing
+            ? Object.fromEntries(existing.responses.map((row) => [row.taskId, row.answer]))
+            : {},
+        );
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setAttemptError(err instanceof Error ? err.message : "Could not load your saved answers.");
+      })
+      .finally(() => {
+        if (!cancelled) setAttemptVersionId(versionId);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [versionId]);
+
   async function startAttempt() {
     setStarting(true);
     setAttemptError(null);
@@ -62,6 +93,20 @@ export default function CandidateAssessmentPage() {
       setAttemptError(err instanceof Error ? err.message : "Could not start this assessment.");
     } finally {
       setStarting(false);
+    }
+  }
+
+  async function submitAttempt() {
+    if (!attempt) return;
+    setSubmitting(true);
+    setAttemptError(null);
+    try {
+      setAttempt(await submitCandidateAttempt(attempt.id));
+      setConfirmingSubmit(false);
+    } catch (err) {
+      setAttemptError(err instanceof Error ? err.message : "Could not submit this attempt.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -86,6 +131,9 @@ export default function CandidateAssessmentPage() {
       setSavingTaskId(null);
     }
   }
+
+  const activeAttempt = attemptVersionId === versionId ? attempt : null;
+  const attemptLoading = attemptVersionId !== versionId;
 
   if (loading) {
     return (
@@ -147,16 +195,54 @@ export default function CandidateAssessmentPage() {
       </section>
 
       <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-6">
-        {attempt ? (
+        {attemptLoading ? (
+          <p className="text-sm text-indigo-900">Checking your attempt…</p>
+        ) : activeAttempt ? (
           <>
             <h2 className="text-lg font-semibold text-slate-900">
-              {attempt.status === "IN_PROGRESS" ? "Answering in progress" : "Attempt submitted"}
+              {activeAttempt.status === "IN_PROGRESS" ? "Answering in progress" : "Attempt submitted"}
             </h2>
             <p className="mt-1 text-sm text-indigo-900">
-              {attempt.status === "IN_PROGRESS"
+              {activeAttempt.status === "IN_PROGRESS"
                 ? "Write each answer, then save it. Saved answers stay here if you come back later; nothing is submitted yet."
-                : "Your answers are saved and this attempt can no longer be changed."}
+                : `Your answers are saved and this attempt was submitted${
+                    activeAttempt.submittedAt
+                      ? ` on ${new Date(activeAttempt.submittedAt).toLocaleString()}`
+                      : ""
+                  }. It can no longer be changed.`}
             </p>
+            {activeAttempt.status === "IN_PROGRESS" &&
+              (confirmingSubmit ? (
+                <div className="mt-3 rounded-xl border border-indigo-200 bg-white p-3">
+                  <p className="text-sm text-slate-700">
+                    Submit this attempt? Only saved answers are submitted, and answers cannot be
+                    changed afterwards.
+                  </p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      onClick={() => void submitAttempt()}
+                      disabled={submitting}
+                      className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+                    >
+                      {submitting ? "Submitting…" : "Submit and lock"}
+                    </button>
+                    <button
+                      onClick={() => setConfirmingSubmit(false)}
+                      disabled={submitting}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmingSubmit(true)}
+                  className="mt-3 rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+                >
+                  Submit attempt
+                </button>
+              ))}
           </>
         ) : (
           <>
@@ -250,7 +336,7 @@ export default function CandidateAssessmentPage() {
               </table>
             </div>
 
-            {attempt && (
+            {activeAttempt && (
               <div className="mt-4 border-t border-slate-100 pt-4">
                 <label
                   htmlFor={`answer-${task.id}`}
@@ -268,14 +354,14 @@ export default function CandidateAssessmentPage() {
                       id={`answer-${task.id}`}
                       rows={5}
                       value={drafts[task.id] ?? ""}
-                      readOnly={attempt.status !== "IN_PROGRESS"}
+                      readOnly={activeAttempt.status !== "IN_PROGRESS"}
                       onChange={(event) =>
                         setDrafts((prev) => ({ ...prev, [task.id]: event.target.value }))
                       }
                       placeholder="Type your answer here"
                       className="mt-2 w-full rounded-lg border border-slate-300 p-2 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none"
                     />
-                    {attempt.status === "IN_PROGRESS" && (
+                    {activeAttempt.status === "IN_PROGRESS" && (
                       <div className="mt-2 flex items-center gap-3">
                         <button
                           onClick={() => void saveAnswer(task.id)}

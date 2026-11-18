@@ -4,6 +4,7 @@ import type {
   CandidateAssessmentDetail,
   CandidateAssessmentList,
   CandidateAttempt,
+  CandidateAttemptLookup,
   CandidateResponse,
   DraftUpdateRequest,
   DraftVersion,
@@ -66,6 +67,18 @@ export function listCandidateAssessments() {
 /** Starts the candidate's attempt on a published version, or resumes the one they already have. */
 export function startCandidateAttempt(versionId: string) {
   return api.post<CandidateAttempt>("/candidate/attempts", { versionId });
+}
+
+/** The candidate's attempt on a version, so the page opens in its real state. */
+export function getCandidateAttempt(versionId: string) {
+  return api.get<CandidateAttemptLookup>(
+    `/candidate/attempts?versionId=${encodeURIComponent(versionId)}`,
+  );
+}
+
+/** Submits and locks the attempt; answers cannot be saved afterwards. */
+export function submitCandidateAttempt(attemptId: string) {
+  return api.post<CandidateAttempt>(`/candidate/attempts/${attemptId}/submit`);
 }
 
 /** Saves one task's answer, replacing any earlier draft of it. */

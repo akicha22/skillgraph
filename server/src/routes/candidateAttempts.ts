@@ -107,6 +107,26 @@ candidateAttemptsRouter.post(
   }),
 );
 
+// The candidate's own attempt on a version, so the page can open in its real state.
+// `attempt: null` means they have not started it yet, which is not an error.
+candidateAttemptsRouter.get(
+  "/",
+  asyncHandler(async (req, res) => {
+    const versionId = typeof req.query.versionId === "string" ? req.query.versionId : "";
+    if (!versionId) {
+      res.status(400).json({ error: "versionId is required" });
+      return;
+    }
+
+    const attempt = await prisma.assessmentAttempt.findUnique({
+      where: { versionId_candidateId: { versionId, candidateId: currentUser(res).id } },
+      include: { responses: { orderBy: { savedAt: "asc" } } },
+    });
+
+    res.json({ attempt: attempt ? serializeAttempt(attempt) : null });
+  }),
+);
+
 candidateAttemptsRouter.get(
   "/:attemptId",
   asyncHandler(async (req, res) => {
@@ -116,6 +136,40 @@ candidateAttemptsRouter.get(
       return;
     }
     res.json(serializeAttempt(attempt));
+  }),
+);
+
+// Submits the attempt and locks it: answers can no longer be saved afterwards.
+candidateAttemptsRouter.post(
+  "/:attemptId/submit",
+  asyncHandler(async (req, res) => {
+    const attemptId = routeParam(req.params.attemptId);
+    const candidateId = currentUser(res).id;
+    const attempt = await prisma.assessmentAttempt.findFirst({
+      where: { id: attemptId, candidateId },
+      select: { id: true },
+    });
+    if (!attempt) {
+      res.status(404).json({ error: "Attempt not found" });
+      return;
+    }
+
+    // The status filter makes the first submit win; a second one changes nothing.
+    const locked = await prisma.assessmentAttempt.updateMany({
+      where: { id: attempt.id, status: "IN_PROGRESS" },
+      data: { status: "SUBMITTED", submittedAt: new Date() },
+    });
+    if (locked.count === 0) {
+      res.status(409).json({ error: "This attempt has already been submitted" });
+      return;
+    }
+
+    const submitted = await findAttempt(attempt.id, candidateId);
+    if (!submitted) {
+      res.status(404).json({ error: "Attempt not found" });
+      return;
+    }
+    res.json(serializeAttempt(submitted));
   }),
 );
 

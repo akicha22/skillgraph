@@ -262,6 +262,9 @@ export type CandidateAttempt = {
   responses: CandidateResponse[];
 };
 
+/** `GET /candidate/attempts?versionId=` — the candidate's attempt on a version, if any. */
+export type CandidateAttemptLookup = { attempt: CandidateAttempt | null };
+
 /** `GET /candidate/assessments/:versionId` — a published version as the candidate sees it. */
 export type CandidateAssessmentDetail = {
   title: string;
