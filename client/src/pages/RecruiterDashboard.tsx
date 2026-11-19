@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, ArrowRight, Megaphone, Plus } from "lucide-react";
-import PermissionCheck from "../components/PermissionCheck";
 import { useAuth } from "../hooks/useAuth";
 import DashboardLayout from "../layouts/DashboardLayout";
 import { listAssessments, listMyPosts } from "../services/assessments";
@@ -194,7 +193,6 @@ export default function RecruiterDashboard() {
           </p>
         )}
       </div>
-      <PermissionCheck />
     </DashboardLayout>
   );
 }
