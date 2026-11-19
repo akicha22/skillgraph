@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { formatZodIssues } from "../auth/schemas";
+import { buildFollowUpQuestions } from "../assessments/followUps";
 import { prisma } from "../db";
 import { currentUser, requireAuth, requireRole } from "../middleware/auth";
 import { asyncHandler } from "../utils/asyncHandler";
@@ -299,5 +300,173 @@ candidateAttemptsRouter.put(
       answer: response.answer,
       savedAt: response.savedAt,
     });
+  }),
+);
+
+// ---------- interview follow-up questions (after submission) ----------
+
+type FollowUpContext = NonNullable<Awaited<ReturnType<typeof followUpContext>>>;
+
+/** The task titles and marks the follow-up questions are derived from. */
+function followUpContext(attemptId: string, candidateId: string) {
+  return prisma.assessmentAttempt.findFirst({
+    where: { id: attemptId, candidateId },
+    select: {
+      id: true,
+      status: true,
+      submittedAt: true,
+      criterionScores: { select: { criterionId: true, marks: true } },
+      followUps: { select: { criterionId: true, answer: true, updatedAt: true } },
+      version: {
+        select: {
+          tasks: {
+            orderBy: { position: "asc" },
+            select: {
+              id: true,
+              title: true,
+              rubric: {
+                orderBy: { position: "asc" },
+                select: { id: true, name: true, maxMarks: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+/**
+ * The same follow-up questions the recruiter sees, plus any answer the candidate already wrote.
+ * Answers to criteria that have since dropped out of the question set are kept, so marking later
+ * never silently deletes what the candidate wrote.
+ */
+function serializeFollowUps(attempt: FollowUpContext) {
+  const scoreByCriterion = new Map(
+    attempt.criterionScores.map((score) => [score.criterionId, score.marks]),
+  );
+  const questions = buildFollowUpQuestions(
+    attempt.version.tasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      rubric: task.rubric.map((criterion) => ({
+        id: criterion.id,
+        name: criterion.name,
+        maxMarks: criterion.maxMarks,
+        score: scoreByCriterion.get(criterion.id) ?? null,
+      })),
+    })),
+  );
+
+  const answerByCriterion = new Map(attempt.followUps.map((row) => [row.criterionId, row]));
+  const asked = new Set(questions.map((question) => question.criterionId));
+
+  const rows = questions.map((question) => {
+    const saved = answerByCriterion.get(question.criterionId);
+    return {
+      criterionId: question.criterionId,
+      criterion: question.criterion,
+      taskTitle: question.taskTitle,
+      reason: question.reason,
+      question: question.question,
+      answer: saved?.answer ?? "",
+      savedAt: saved?.updatedAt ?? null,
+    };
+  });
+
+  // Earlier answers whose criterion is no longer among the derived questions.
+  for (const task of attempt.version.tasks) {
+    for (const criterion of task.rubric) {
+      if (asked.has(criterion.id)) continue;
+      const saved = answerByCriterion.get(criterion.id);
+      if (!saved || saved.answer.trim().length === 0) continue;
+      rows.push({
+        criterionId: criterion.id,
+        criterion: criterion.name,
+        taskTitle: task.title,
+        reason: "Answered earlier",
+        question: `On "${task.title}", walk me through how you handled "${criterion.name}".`,
+        answer: saved.answer,
+        savedAt: saved.updatedAt,
+      });
+    }
+  }
+
+  return {
+    submittedAt: attempt.submittedAt,
+    questions: rows,
+    answeredCount: rows.filter((row) => row.answer.trim().length > 0).length,
+    total: rows.length,
+  };
+}
+
+// Follow-up questions open only after submission: before that there is nothing to follow up on.
+candidateAttemptsRouter.get(
+  "/:attemptId/follow-ups",
+  asyncHandler(async (req, res) => {
+    const attempt = await followUpContext(routeParam(req.params.attemptId), currentUser(res).id);
+    if (!attempt) {
+      res.status(404).json({ error: "Attempt not found" });
+      return;
+    }
+    if (attempt.status !== "SUBMITTED") {
+      res.status(409).json({ error: "Follow-up questions open after you submit this attempt" });
+      return;
+    }
+    res.json(serializeFollowUps(attempt));
+  }),
+);
+
+const REFLECTION_MAX = 4000;
+const followUpSchema = z.object({
+  answer: z
+    .string()
+    .max(REFLECTION_MAX, `Keep your answer under ${REFLECTION_MAX} characters`),
+});
+
+// Saves one follow-up answer. Only a criterion that belongs to this attempt's version is accepted.
+candidateAttemptsRouter.put(
+  "/:attemptId/follow-ups/:criterionId",
+  asyncHandler(async (req, res) => {
+    const parsed = followUpSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid answer", details: formatZodIssues(parsed.error) });
+      return;
+    }
+
+    const attemptId = routeParam(req.params.attemptId);
+    const criterionId = routeParam(req.params.criterionId);
+    const candidateId = currentUser(res).id;
+
+    const attempt = await prisma.assessmentAttempt.findFirst({
+      where: { id: attemptId, candidateId },
+      select: { id: true, status: true, versionId: true },
+    });
+    if (!attempt) {
+      res.status(404).json({ error: "Attempt not found" });
+      return;
+    }
+    if (attempt.status !== "SUBMITTED") {
+      res.status(409).json({ error: "Submit this attempt before answering follow-up questions" });
+      return;
+    }
+
+    const criterion = await prisma.assessmentRubricCriterion.findFirst({
+      where: { id: criterionId, task: { versionId: attempt.versionId } },
+      select: { id: true },
+    });
+    if (!criterion) {
+      res.status(404).json({ error: "That question is not part of this assessment" });
+      return;
+    }
+
+    const saved = await prisma.attemptFollowUp.upsert({
+      where: { attemptId_criterionId: { attemptId, criterionId } },
+      update: { answer: parsed.data.answer },
+      create: { attemptId, criterionId, answer: parsed.data.answer },
+      select: { criterionId: true, answer: true, updatedAt: true },
+    });
+
+    res.json({ criterionId: saved.criterionId, answer: saved.answer, savedAt: saved.updatedAt });
   }),
 );

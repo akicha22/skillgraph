@@ -31,6 +31,17 @@ export const generationSchema = z.object({
     .max(3)
     .optional(),
   aiPolicy: z.enum(["NOT_ALLOWED", "ALLOWED_DISCLOSED"]).default("NOT_ALLOWED"),
+  // Answers to the questions the server asked about a thin brief; folded into the requirements text
+  // before generation so the stored draft keeps the context the scenarios were built from.
+  clarifications: z
+    .array(
+      z.object({
+        question: z.string().trim().min(5).max(300),
+        answer: z.string().trim().min(1).max(500),
+      }),
+    )
+    .max(3)
+    .default([]),
   // Selected skills with weights and subskills
   targetSkills: z.array(skillSchema).min(1).max(8),
 });

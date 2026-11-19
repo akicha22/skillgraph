@@ -14,6 +14,9 @@ import { candidateAttemptsRouter } from "./routes/candidateAttempts";
 import { recruiterAttemptsRouter } from "./routes/recruiterAttempts";
 import { recruiterShortlistsRouter } from "./routes/recruiterShortlists";
 import { candidatePostsRouter, recruiterPostsRouter } from "./routes/posts";
+import { candidateTasksRouter } from "./routes/candidateTasks";
+import { candidateProfileRouter } from "./routes/candidateProfile";
+import { locationsRouter } from "./routes/locations";
 
 /**
  * The HTTP app with no listener attached: index.ts serves it, and the permission tests mount it on
@@ -40,6 +43,9 @@ app.use("/api/candidate/skills", candidateSkillsRouter);
 app.use("/api/candidate/assessments", candidateAssessmentsRouter);
 app.use("/api/candidate/attempts", candidateAttemptsRouter);
 app.use("/api/candidate/posts", candidatePostsRouter);
+app.use("/api/candidate/tasks", candidateTasksRouter);
+app.use("/api/candidate/profile", candidateProfileRouter);
+app.use("/api/locations", locationsRouter);
 app.use("/api/candidate", candidateGuardRouter);
 app.use("/api/recruiter/assessments", recruiterAssessmentsRouter);
 app.use("/api/recruiter/attempts", recruiterAttemptsRouter);

@@ -186,6 +186,9 @@ export async function assembleAssessment(
     },
     jobTitle: finalConfig.jobTitle ?? undefined,
     companyName: finalConfig.companyName,
+    // The brief and level let each task carry real.role-specific facts instead of a placeholder.
+    requirementsText: finalConfig.requirementsText,
+    level: finalConfig.targetLevel,
   };
 
   // 5. For each skill, determine assessment type (respect preferred list)

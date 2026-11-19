@@ -2,6 +2,13 @@ import { api } from "./api";
 import type {
   AssessmentList,
   CandidateAssessmentDetail,
+  CandidateFollowUps,
+  CandidateProfileResponse,
+  CandidateProfileUpdate,
+  CandidateTasksResponse,
+  ClarificationQuestion,
+  DailyTask,
+  LocationSuggestion,
   CriterionScoreInput,
   CandidateAssessmentList,
   ComparisonDetail,
@@ -34,6 +41,19 @@ export function listAssessments() {
 /** Reads the skills, level, duration and task count implied by the recruiter's brief. */
 export function parseRequirements(text: string) {
   return api.post<ParsedRequirements>(`${BASE}/parse-requirements`, { text });
+}
+
+/**
+ * Asks which details the brief is missing. An empty list means the recruiter should not be
+ * interrupted with questions.
+ */
+export function clarifyAssessment(body: {
+  requirementsText: string;
+  jobTitle?: string;
+  targetLevel?: string;
+  skillSlugs: string[];
+}) {
+  return api.post<{ questions: ClarificationQuestion[] }>(`${BASE}/clarify`, body);
 }
 
 /** Generates and stores a new assessment draft (version 1). */
@@ -167,6 +187,50 @@ export function createRecruiterPost(body: RecruiterPostInput) {
 /** Closes or reopens a post; a closed post disappears from the candidate feed. */
 export function setRecruiterPostStatus(postId: string, status: "OPEN" | "CLOSED") {
   return api.patch<{ post: RecruiterPost }>(`/recruiter/posts/${postId}`, { status });
+}
+
+/** Edits any field of a post, including closing or reopening it. */
+export function updateRecruiterPost(postId: string, body: Partial<RecruiterPostInput>) {
+  return api.patch<{ post: RecruiterPost }>(`/recruiter/posts/${postId}`, body);
+}
+
+/** Today's practice drills for the candidate, generated from their own skills. */
+export function listCandidateTasks() {
+  return api.get<CandidateTasksResponse>("/candidate/tasks");
+}
+
+/** Marks a practice drill done (with an optional note) or reopens it. */
+export function completeCandidateTask(taskId: string, done: boolean, reflection?: string) {
+  return api.put<{ task: DailyTask }>(`/candidate/tasks/${taskId}`, { done, reflection });
+}
+
+/** The candidate's own profile, skills and assessment statistics. */
+export function getCandidateProfile() {
+  return api.get<CandidateProfileResponse>("/candidate/profile");
+}
+
+export function updateCandidateProfile(body: CandidateProfileUpdate) {
+  return api.patch<{ profile: CandidateProfileResponse["profile"] }>("/candidate/profile", body);
+}
+
+/** City suggestions for a location field; free text is still accepted by every form. */
+export function searchLocations(query: string) {
+  return api.get<{ locations: LocationSuggestion[] }>(
+    `/locations?q=${encodeURIComponent(query)}`,
+  );
+}
+
+/** The follow-up questions for a submitted attempt, with any answers already written. */
+export function getAttemptFollowUps(attemptId: string) {
+  return api.get<CandidateFollowUps>(`/candidate/attempts/${attemptId}/follow-ups`);
+}
+
+/** Saves one follow-up answer; only valid after the attempt is submitted. */
+export function saveAttemptFollowUp(attemptId: string, criterionId: string, answer: string) {
+  return api.put<{ criterionId: string; answer: string; savedAt: string }>(
+    `/candidate/attempts/${attemptId}/follow-ups/${criterionId}`,
+    { answer },
+  );
 }
 
 export function deleteRecruiterPost(postId: string) {

@@ -6,11 +6,39 @@ import { seedDemoAssessment, seedDemoPosts } from "./seedDemo";
 
 const DEMO_PASSWORD = "Demo@12345";
 
+// Demo candidates carry a filled-in profile so the Profile section is not empty on a fresh database.
 const demoUsers = [
   { email: "recruiter@skillgraph.test", name: "Priya Nair", role: "RECRUITER" },
-  { email: "candidate1@skillgraph.test", name: "Arjun Shetty", role: "CANDIDATE" },
-  { email: "candidate2@skillgraph.test", name: "Meera Kulkarni", role: "CANDIDATE" },
-  { email: "candidate3@skillgraph.test", name: "Rohan Fernandes", role: "CANDIDATE" },
+  {
+    email: "candidate1@skillgraph.test",
+    name: "Arjun Shetty",
+    role: "CANDIDATE",
+    headline: "Operations analyst — reporting, client communication and supplier negotiation",
+    location: "Bengaluru",
+    about:
+      "Three years in trading operations. I keep delivery dates honest, write the client email when something goes wrong, and rebuild the weekly sales view when the numbers stop matching.",
+    yearsExperience: 3,
+  },
+  {
+    email: "candidate2@skillgraph.test",
+    name: "Meera Kulkarni",
+    role: "CANDIDATE",
+    headline: "Data analyst learning to turn messy tables into decisions",
+    location: "Pune",
+    about:
+      "Two years of reporting work in a logistics team. Comfortable in SQL and spreadsheets; working on writing shorter, clearer findings.",
+    yearsExperience: 2,
+  },
+  {
+    email: "candidate3@skillgraph.test",
+    name: "Rohan Fernandes",
+    role: "CANDIDATE",
+    headline: "Final-year student preparing for analyst roles",
+    location: "Mumbai",
+    about:
+      "Final-year commerce student. Practising data tasks and client communication before applying for graduate analyst roles.",
+    yearsExperience: 0,
+  },
 ];
 
 async function main() {
@@ -23,7 +51,7 @@ async function main() {
   for (const u of demoUsers) {
     await prisma.user.upsert({
       where: { email: u.email },
-      update: { name: u.name, role: u.role, passwordHash, isDemo: true },
+      update: { ...u, passwordHash, isDemo: true },
       create: { ...u, passwordHash, isDemo: true },
     });
   }

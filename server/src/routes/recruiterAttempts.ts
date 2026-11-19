@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { formatZodIssues } from "../auth/schemas";
+import { buildFollowUpQuestions } from "../assessments/followUps";
 import { prisma } from "../db";
 import { currentUser, requireAuth, requireRole } from "../middleware/auth";
 import { asyncHandler } from "../utils/asyncHandler";
@@ -43,6 +44,8 @@ const submissionQuery = (attemptId: string, ownerId: string) =>
       candidate: { select: { name: true, email: true } },
       responses: { select: { taskId: true, answer: true, savedAt: true } },
       criterionScores: { select: { criterionId: true, marks: true } },
+      // The candidate's written answers to the follow-up questions, if they have written any.
+      followUps: { select: { criterionId: true, answer: true, updatedAt: true } },
       version: {
         select: {
           id: true,
@@ -106,17 +109,6 @@ function answerKeyOf(privateData: string): Record<string, string | number> {
     return {};
   }
 }
-
-type FollowUpQuestion = {
-  criterionId: string;
-  criterion: string;
-  taskId: string;
-  taskTitle: string;
-  score: number | null;
-  maxMarks: number;
-  reason: string;
-  question: string;
-};
 
 /** The answers, the criteria they are scored against, and the running total. */
 function serializeSubmission(attempt: SubmissionRecord) {
@@ -197,42 +189,28 @@ function serializeSubmission(attempt: SubmissionRecord) {
     };
   });
 
-  // Three interview questions from the weakest or unmarked criteria, one per task. Rule-based
-  // from the rubric: no AI and no outcome is decided here.
-  const ranked = tasks
-    .flatMap((task) =>
-      task.rubric.map((criterion) => ({
-        criterionId: criterion.id,
-        criterion: criterion.name,
-        taskId: task.id,
-        taskTitle: task.title,
-        score: criterion.score,
+  // The same questions the candidate is asked after submitting, built from the weakest or
+  // unmarked criteria by a shared fixed rule. Rule-based from the rubric: no AI, no outcome.
+  const answerByCriterion = new Map(attempt.followUps.map((row) => [row.criterionId, row]));
+  const followUpQuestions = buildFollowUpQuestions(
+    tasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      rubric: task.rubric.map((criterion) => ({
+        id: criterion.id,
+        name: criterion.name,
         maxMarks: criterion.maxMarks,
-        ratio:
-          criterion.score === null ? 0 : criterion.score / Math.max(1, criterion.maxMarks),
-        question: `On "${task.title}", walk me through how you handled "${criterion.name}". What did you check, and what would you do differently?`,
+        score: criterion.score,
       })),
-    )
-    .sort((a, b) => a.ratio - b.ratio);
-
-  const followUpQuestions: FollowUpQuestion[] = [];
-  const questionedTaskIds = new Set<string>();
-  for (const row of ranked) {
-    if (followUpQuestions.length >= 3) break;
-    if (questionedTaskIds.has(row.taskId)) continue;
-    questionedTaskIds.add(row.taskId);
-    followUpQuestions.push({
-      criterionId: row.criterionId,
-      criterion: row.criterion,
-      taskId: row.taskId,
-      taskTitle: row.taskTitle,
-      score: row.score,
-      maxMarks: row.maxMarks,
-      reason:
-        row.score === null ? "Not marked yet" : `Scored ${row.score} of ${row.maxMarks}`,
-      question: row.question,
-    });
-  }
+    })),
+  ).map((question) => {
+    const saved = answerByCriterion.get(question.criterionId);
+    return {
+      ...question,
+      candidateAnswer: hasAnswer(saved?.answer) ? (saved?.answer ?? null) : null,
+      answerSavedAt: saved?.updatedAt ?? null,
+    };
+  });
 
   return {
     id: attempt.id,

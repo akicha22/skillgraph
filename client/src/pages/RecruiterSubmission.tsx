@@ -431,7 +431,8 @@ export default function RecruiterSubmission() {
           <p className="mt-1 max-w-3xl text-sm text-slate-600">
             Taken from the lowest-scoring or still-unmarked criteria, one per task, so you can check
             the work in a live conversation. Chosen from the rubric by a fixed rule — no AI is
-            involved.
+            involved. The candidate can answer these in writing after submitting; their answers
+            appear underneath each question.
           </p>
           <ol className="mt-3 space-y-3">
             {submission.followUpQuestions.map((item) => (
@@ -440,6 +441,23 @@ export default function RecruiterSubmission() {
                 <p className="mt-1 text-xs text-slate-500">
                   {item.taskTitle} · {item.criterion} · {item.reason}
                 </p>
+                {item.candidateAnswer ? (
+                  <div className="mt-2 rounded-lg border border-slate-200 bg-white p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Candidate&apos;s answer
+                      {item.answerSavedAt
+                        ? ` · ${new Date(item.answerSavedAt).toLocaleDateString()}`
+                        : ""}
+                    </p>
+                    <p className="mt-1 whitespace-pre-line text-sm text-slate-700">
+                      {item.candidateAnswer}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-xs text-slate-500">
+                    The candidate has not written an answer to this one.
+                  </p>
+                )}
               </li>
             ))}
           </ol>

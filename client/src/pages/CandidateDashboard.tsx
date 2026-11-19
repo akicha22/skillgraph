@@ -71,10 +71,41 @@ export default function CandidateDashboard() {
             <Megaphone className="h-3.5 w-3.5" aria-hidden />
             {posts?.length ?? 0} recruiter posts
           </span>
-          <Link to="/candidate/skills" className="ml-auto font-medium text-indigo-600 hover:underline">
-            Update your skills
-          </Link>
+          <div className="ml-auto flex flex-wrap items-center gap-3 font-medium">
+            <Link to="/candidate/tasks" className="text-indigo-600 hover:underline">
+              Daily tasks
+            </Link>
+            <Link to="/candidate/posts" className="text-indigo-600 hover:underline">
+              Opportunities
+            </Link>
+            <Link to="/candidate/profile" className="text-indigo-600 hover:underline">
+              Your profile
+            </Link>
+          </div>
         </div>
+      </section>
+
+      <section className="grid gap-3 sm:grid-cols-2">
+        <Link
+          to="/candidate/tasks"
+          className="rounded-2xl border border-slate-200 bg-white p-5 hover:border-indigo-300"
+        >
+          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Practise</p>
+          <h2 className="mt-1 text-lg font-semibold text-slate-900">Today&apos;s practice tasks</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Three short drills from your skills. Unmarked and private — preparation, not an exam.
+          </p>
+        </Link>
+        <Link
+          to="/candidate/posts"
+          className="rounded-2xl border border-slate-200 bg-white p-5 hover:border-indigo-300"
+        >
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Discover</p>
+          <h2 className="mt-1 text-lg font-semibold text-slate-900">Open roles</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Requirements posts from recruiters, with the skills and experience each role needs.
+          </p>
+        </Link>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6">
@@ -161,7 +192,12 @@ export default function CandidateDashboard() {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6">
-        <h2 className="text-lg font-semibold text-slate-900">Recruiter posts</h2>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-lg font-semibold text-slate-900">Opportunities for you</h2>
+          <Link to="/candidate/posts" className="text-sm font-medium text-indigo-600 hover:underline">
+            See all openings
+          </Link>
+        </div>
         <p className="mt-1 text-sm text-slate-600">
           What recruiters are hiring for right now. A post is a requirement, not an assessment.
         </p>

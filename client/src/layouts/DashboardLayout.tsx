@@ -6,10 +6,14 @@ import type { Role } from "../types/auth";
 const navByRole: Record<Role, { to: string; label: string; end?: boolean }[]> = {
   CANDIDATE: [
     { to: "/candidate", label: "Overview", end: true },
-    { to: "/candidate/skills", label: "My skills" },
+    { to: "/candidate/tasks", label: "Daily tasks" },
+    { to: "/candidate/posts", label: "Opportunities" },
+    { to: "/candidate/profile", label: "Profile" },
+    { to: "/candidate/skills", label: "Skills" },
   ],
   RECRUITER: [
     { to: "/recruiter", label: "Overview", end: true },
+    { to: "/recruiter/posts", label: "Requirements posts" },
     { to: "/recruiter/shortlists", label: "Shortlists" },
   ],
 };

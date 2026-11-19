@@ -3,7 +3,8 @@ import { z } from "zod";
 import { formatZodIssues } from "../auth/schemas";
 import { prisma } from "../db";
 import { parseRequirements, warnOnUnknownSlugs } from "../assessments/requirementParser";
-import type { Level, Difficulty } from "../assessments/constants";
+import { clarificationQuestions, mergeClarifications } from "../assessments/clarify";
+import { LEVELS, type Level, type Difficulty } from "../assessments/constants";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { asyncHandler } from "../utils/asyncHandler";
 import { generationSchemaWithRefinements } from "../assessments/generationSchema";
@@ -103,6 +104,43 @@ recruiterAssessmentsRouter.post(
   }),
 );
 
+const clarifySchema = z.object({
+  requirementsText: z.string().trim().min(10).max(3000),
+  jobTitle: z.string().trim().max(100).optional(),
+  targetLevel: z.enum(LEVELS).optional(),
+  skillSlugs: z.array(z.string().min(1).max(80)).max(8).default([]),
+});
+
+// Asks only for what the brief is missing. An empty list means the recruiter is not interrupted.
+recruiterAssessmentsRouter.post(
+  "/clarify",
+  asyncHandler(async (req, res) => {
+    const parsed = clarifySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid request", details: formatZodIssues(parsed.error) });
+      return;
+    }
+
+    const skills =
+      parsed.data.skillSlugs.length > 0
+        ? await prisma.skill.findMany({
+            where: { slug: { in: parsed.data.skillSlugs } },
+            select: { slug: true, name: true },
+          })
+        : [];
+
+    res.json({
+      questions: clarificationQuestions({
+        requirementsText: parsed.data.requirementsText,
+        jobTitle: parsed.data.jobTitle,
+        targetLevel: parsed.data.targetLevel,
+        skillSlugs: skills.map((skill) => skill.slug),
+        skillNames: skills.map((skill) => skill.name),
+      }),
+    });
+  }),
+);
+
 recruiterAssessmentsRouter.post(
   "/generate",
   asyncHandler(async (req, res) => {
@@ -116,8 +154,9 @@ recruiterAssessmentsRouter.post(
         res.status(403).json({ error: "Recruiter role required" });
         return;
     }
-    const { requirementsText, companyName, jobTitle, targetSkills, aiPolicy, difficulty, durationMinutes, taskCount, preferredAssessmentTypes } = parsedBody.data as {
+    const { requirementsText, companyName, jobTitle, targetSkills, aiPolicy, difficulty, durationMinutes, taskCount, preferredAssessmentTypes, clarifications } = parsedBody.data as {
       requirementsText: string;
+      clarifications: { question: string; answer: string }[];
       companyName: string;
       jobTitle?: string;
       targetSkills: { skillSlug: string; weight: number; subskills: string[]; source: "REQUESTED" | "SUGGESTED_APPROVED" }[];
@@ -162,8 +201,11 @@ recruiterAssessmentsRouter.post(
             }
         }
     }
-    // Parse requirements to fill defaults
-    const parsedReqs = await parseRequirements(requirementsText, skills);
+    // The recruiter's answers are part of the brief from here on: defaults are parsed from the
+    // merged text and the stored version keeps it, so the context that produced the scenarios is
+    // visible next to the draft.
+    const brief = mergeClarifications(requirementsText, clarifications ?? []);
+    const parsedReqs = await parseRequirements(brief, skills);
     // Build final config with explicit types
     interface RecruiterFinalConfig {
         requirementsText: string;
@@ -179,7 +221,7 @@ recruiterAssessmentsRouter.post(
         targetSkills: Array<{ skillSlug: string; weight: number; subskills: string[]; source: "REQUESTED" | "SUGGESTED_APPROVED" }>;
     }
     const finalConfig: RecruiterFinalConfig = {
-        requirementsText: parsedBody.data.requirementsText,
+        requirementsText: brief,
         jobTitle: jobTitle ?? (parsedReqs.jobTitle ?? undefined),
         companyName: parsedBody.data.companyName,
         targetLevel: parsedBody.data.targetLevel ?? parsedReqs.targetLevel ?? "FRESHER",
@@ -233,7 +275,7 @@ recruiterAssessmentsRouter.post(
                 assessmentId: assessment.id,
                 versionNumber: 1,
                 status: "DRAFT",
-                requirementsText,
+                requirementsText: brief,
                 title: assembled.title,
                 description: assembled.description,
                 jobContext: assembled.jobContext,

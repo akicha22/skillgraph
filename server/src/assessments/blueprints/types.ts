@@ -26,6 +26,9 @@ export interface BlueprintContext {
   skillName?: string;
   jobTitle?: string;
   companyName?: string;
+  /** The recruiter's own brief, used to derive concrete scenario facts. */
+  requirementsText?: string;
+  level?: string;
   skill?: {
     assessmentTypes?: AssessmentType[];
   };

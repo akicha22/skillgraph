@@ -11,8 +11,10 @@ import {
 import DashboardLayout from "../layouts/DashboardLayout";
 import DataPreview from "../components/DataPreview";
 import {
+  getAttemptFollowUps,
   getCandidateAssessment,
   getCandidateAttempt,
+  saveAttemptFollowUp,
   saveCandidateAnswer,
   startCandidateAttempt,
   submitCandidateAttempt,
@@ -24,6 +26,7 @@ import {
   TASK_TYPE_LABELS,
   type CandidateAssessmentDetail,
   type CandidateAttempt,
+  type CandidateFollowUps,
 } from "../types/assessments";
 
 export default function CandidateAssessmentPage() {
@@ -44,6 +47,13 @@ export default function CandidateAssessmentPage() {
   const [reloadingQuestions, setReloadingQuestions] = useState(false);
   // One task is shown at a time; the strip above the slide switches between them.
   const [activeIndex, setActiveIndex] = useState(0);
+  // Follow-up questions open only after submission, and answering them is optional.
+  const [followUps, setFollowUps] = useState<CandidateFollowUps | null>(null);
+  const [followUpDrafts, setFollowUpDrafts] = useState<Record<string, string>>({});
+  const [followUpBusyId, setFollowUpBusyId] = useState<string | null>(null);
+  const [followUpError, setFollowUpError] = useState<string | null>(null);
+  const submittedAttemptId =
+    attempt?.status === "SUBMITTED" && attemptVersionId === versionId ? attempt.id : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -93,6 +103,55 @@ export default function CandidateAssessmentPage() {
       cancelled = true;
     };
   }, [versionId]);
+
+  // The questions are derived server-side from the rubric, so the candidate sees exactly what the
+  // recruiter sees, with any answer already written.
+  useEffect(() => {
+    if (!submittedAttemptId) return;
+    let cancelled = false;
+    getAttemptFollowUps(submittedAttemptId)
+      .then((loaded) => {
+        if (cancelled) return;
+        setFollowUps(loaded);
+        setFollowUpDrafts(
+          Object.fromEntries(loaded.questions.map((row) => [row.criterionId, row.answer])),
+        );
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setFollowUpError(
+          err instanceof Error ? err.message : "Could not load the follow-up questions.",
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [submittedAttemptId]);
+
+  async function saveFollowUp(criterionId: string) {
+    if (!submittedAttemptId) return;
+    setFollowUpBusyId(criterionId);
+    setFollowUpError(null);
+    const answer = followUpDrafts[criterionId] ?? "";
+    try {
+      await saveAttemptFollowUp(submittedAttemptId, criterionId, answer);
+      setFollowUps((prev) => {
+        if (!prev) return prev;
+        const questions = prev.questions.map((row) =>
+          row.criterionId === criterionId ? { ...row, answer } : row,
+        );
+        return {
+          ...prev,
+          questions,
+          answeredCount: questions.filter((row) => row.answer.trim().length > 0).length,
+        };
+      });
+    } catch (err) {
+      setFollowUpError(err instanceof Error ? err.message : "Could not save that answer.");
+    } finally {
+      setFollowUpBusyId(null);
+    }
+  }
 
   async function startAttempt() {
     setStarting(true);
@@ -424,6 +483,59 @@ export default function CandidateAssessmentPage() {
               <p className="mt-2 text-xs text-emerald-900">
                 Each task's rubric below shows what was awarded for each criterion.
               </p>
+            </section>
+          )}
+
+          {activeAttempt.status === "SUBMITTED" && followUps && followUps.questions.length > 0 && (
+            <section className="rounded-2xl border border-slate-200 bg-white p-6">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="text-base font-semibold text-slate-900">
+                  Interview follow-up questions
+                </h2>
+                <span className="text-xs text-slate-500">
+                  {followUps.answeredCount} of {followUps.total} answered
+                </span>
+              </div>
+              <p className="mt-1 text-sm text-slate-600">
+                Your recruiter prepares these from the criteria that were weakest or not yet marked,
+                to guide a live conversation. You can answer them in writing here after submitting —
+                it is optional, and it does not change your marks.
+              </p>
+              {followUpError && <p className="mt-2 text-sm text-rose-700">{followUpError}</p>}
+              {followUps.questions.map((question) => (
+                <div key={question.criterionId} className="mt-4 rounded-xl bg-slate-50 p-4">
+                  <p className="text-sm font-medium text-slate-900">{question.question}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {question.taskTitle} · {question.criterion} · {question.reason}
+                  </p>
+                  <textarea
+                    rows={4}
+                    value={followUpDrafts[question.criterionId] ?? ""}
+                    onChange={(event) =>
+                      setFollowUpDrafts((prev) => ({
+                        ...prev,
+                        [question.criterionId]: event.target.value,
+                      }))
+                    }
+                    placeholder="Answer in a few sentences, if you would like to."
+                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none"
+                  />
+                  <div className="mt-2 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => void saveFollowUp(question.criterionId)}
+                      disabled={followUpBusyId === question.criterionId}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                    >
+                      {followUpBusyId === question.criterionId ? "Saving…" : "Save answer"}
+                    </button>
+                    {question.answer.trim().length > 0 &&
+                      (followUpDrafts[question.criterionId] ?? "") === question.answer && (
+                        <span className="text-xs text-emerald-700">Saved</span>
+                      )}
+                  </div>
+                </div>
+              ))}
             </section>
           )}
 

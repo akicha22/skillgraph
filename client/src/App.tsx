@@ -13,6 +13,10 @@ import CandidateAssessmentPage from "./pages/CandidateAssessment";
 import RecruiterSubmission from "./pages/RecruiterSubmission";
 import RecruiterCompare from "./pages/RecruiterCompare";
 import RecruiterShortlists from "./pages/RecruiterShortlists";
+import RecruiterPosts from "./pages/RecruiterPosts";
+import CandidatePosts from "./pages/CandidatePosts";
+import CandidateTasks from "./pages/CandidateTasks";
+import CandidateProfile from "./pages/CandidateProfile";
 
 export default function App() {
   return (
@@ -48,10 +52,42 @@ export default function App() {
             }
           />
           <Route
+            path="/candidate/tasks"
+            element={
+              <ProtectedRoute role="CANDIDATE">
+                <CandidateTasks />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/candidate/posts"
+            element={
+              <ProtectedRoute role="CANDIDATE">
+                <CandidatePosts />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/candidate/profile"
+            element={
+              <ProtectedRoute role="CANDIDATE">
+                <CandidateProfile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/candidate/assessments/:versionId"
             element={
               <ProtectedRoute role="CANDIDATE">
                 <CandidateAssessmentPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recruiter/posts"
+            element={
+              <ProtectedRoute role="RECRUITER">
+                <RecruiterPosts />
               </ProtectedRoute>
             }
           />

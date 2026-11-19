@@ -18,7 +18,8 @@ file than the one being served:
 | Submission A | Arjun Shetty (`candidate1`) — submitted, **fully marked**, `reviewedAt` set |
 | Submission B | Meera Kulkarni (`candidate2`) — submitted, **not marked**, so marking can be demonstrated live |
 | Shortlist | "Operations analyst - shortlist" holding Arjun, with a private note |
-| Requirements posts | Two open roles (operations analyst in Bengaluru, remote data analyst) shown on every candidate dashboard; close one from the recruiter dashboard and it leaves the candidate feed without being deleted |
+| Requirements posts | Two open roles (operations analyst in Bengaluru, remote data analyst) with skills, experience and work type, shown under **Opportunities**; close one from the recruiter posts page and it leaves the candidate feed without being deleted |
+| Candidate profiles | Demo candidates have a headline, city, years of experience and a short about text, so the profile page is filled in |
 
 The tasks, rubrics and answer keys come from the same template assembler the app uses. The marks on
 Submission A are sample marks placed by the seed — the app computes totals, coverage and follow-ups,
@@ -93,6 +94,8 @@ Open any submission and use the **Shortlist** card, or go to **Shortlists** in t
 Sign in as `candidate1@skillgraph.test`.
 
 - The published assessment is listed; opening it shows the attempt already submitted.
+- The task text now reads as a concrete case with figures and constraints, not a generic prompt:
+  the same brief that produced a vague task in the old build produces a specific one here.
 - **Your result** shows 79 out of 100 and the marks per criterion.
 - Nothing private is present in the payload: no answer key, no marking guidance, no `privateData`.
   This is enforced on the server, not hidden in the UI.
@@ -100,7 +103,28 @@ Sign in as `candidate1@skillgraph.test`.
 Sign in as `candidate2@skillgraph.test` to see the other side: a submitted attempt with no marks
 yet, and the page says so instead of showing a zero.
 
-### 8. What to say about the privacy model
+Under a submitted attempt, **Interview follow-up questions** lets the candidate answer the recruiter's
+questions in writing. Save one, then open that submission as the recruiter: the answer appears under
+the same question in the recruiter's view.
+
+### 8. Practice tasks, profile and opportunities
+
+Still as `candidate1`:
+
+- **Daily tasks** — three short drills generated from the candidate's own skills. Each has a
+  situation, figures, three prompts to work through and a one-line reflection. Mark one done: the
+  streak and the seven-day strip update. Nothing here is marked, and no recruiter can see it.
+- **Profile** — headline, city, experience and about text, with skills grouped by domain and real
+  assessment statistics (available, in progress, submitted, marked, average result). Edit and save a
+  field to show it persists.
+- **Opportunities** — the two seeded posts with skills, experience and work type. Search for a city
+  or skill, or pick a work type. Close one post as the recruiter and it disappears from here.
+
+As the recruiter, open **Requirements posts**: the composer includes a location field with city
+suggestions (type "Banga" and pick Bengaluru), skills, experience and work type. Edit, close, reopen
+and remove all happen from that page, separately from assessments.
+
+### 9. What to say about the privacy model
 
 - A candidate's assessment and result are built from an allowlist; the answer key and marking notes
   are never loaded for them.

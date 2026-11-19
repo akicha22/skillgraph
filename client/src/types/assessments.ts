@@ -52,8 +52,29 @@ export type TargetSkillInput = {
   source: "REQUESTED" | "SUGGESTED_APPROVED";
 };
 
+export type ClarificationQuestion = {
+  id: "product" | "market" | "team" | "scale" | "tools";
+  question: string;
+  why: string;
+  placeholder: string;
+};
+
+export type ClarificationAnswer = { question: string; answer: string };
+
+export type EmploymentType = "FULL_TIME" | "PART_TIME" | "CONTRACT" | "INTERNSHIP" | "REMOTE";
+
+export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
+  FULL_TIME: "Full time",
+  PART_TIME: "Part time",
+  CONTRACT: "Contract",
+  INTERNSHIP: "Internship",
+  REMOTE: "Remote",
+};
+
 export type GenerateRequest = {
   requirementsText: string;
+  /** Answers to the clarification questions; folded into the brief by the server. */
+  clarifications?: ClarificationAnswer[];
   companyName: string;
   jobTitle?: string;
   description?: string;
@@ -312,6 +333,9 @@ export type FollowUpQuestion = {
   maxMarks: number;
   reason: string;
   question: string;
+  /** What the candidate wrote after submitting, or null when they have not answered. */
+  candidateAnswer: string | null;
+  answerSavedAt: string | null;
 };
 
 export type CriterionScoreInput = { criterionId: string; marks: number };
@@ -405,8 +429,12 @@ export type RecruiterPost = {
   companyName: string;
   location: string | null;
   requirements: string;
+  skills: string[];
+  experience: string | null;
+  employmentType: string | null;
   status: string;
   createdAt: string;
+  updatedAt: string;
 };
 
 /** `GET /candidate/posts` — every open requirements post, with who posted it. */
@@ -416,6 +444,9 @@ export type CandidatePost = {
   companyName: string;
   location: string | null;
   requirements: string;
+  skills: string[];
+  experience: string | null;
+  employmentType: string | null;
   recruiterName: string;
   createdAt: string;
 };
@@ -425,6 +456,9 @@ export type RecruiterPostInput = {
   companyName: string;
   location?: string;
   requirements: string;
+  skills?: string[];
+  experience?: string;
+  employmentType?: EmploymentType;
 };
 
 /** `GET /candidate/assessments` — every published version a candidate can open. */
@@ -530,3 +564,99 @@ export type CandidateAssessmentDetail = {
   assessment: { jobTitle: string; companyName: string };
   tasks: CandidateTask[];
 };
+
+/**
+ * `GET /candidate/tasks` — one daily practice drill. Practice is a habit: no marks, no rubric,
+ * no attempt and nothing a recruiter can see.
+ */
+export type DailyTask = {
+  id: string;
+  position: number;
+  family: string;
+  title: string;
+  skillName: string;
+  scenario: string;
+  steps: string[];
+  estimateMinutes: number;
+  status: "PENDING" | "DONE";
+  reflection: string;
+  completedAt: string | null;
+};
+
+export type DailyTaskDay = { day: string; total: number; done: number };
+
+export type CandidateTasksResponse = {
+  day: string;
+  /** True when the candidate has not chosen skills, so there is nothing honest to practise. */
+  needsSkills: boolean;
+  tasks: DailyTask[];
+  summary: { todayTotal: number; todayDone: number; streakDays: number; last7: DailyTaskDay[] };
+};
+
+/** `GET /candidate/profile` — the candidate's own profile and what their assessments show. */
+export type CandidateProfile = {
+  name: string;
+  email: string;
+  headline: string | null;
+  location: string | null;
+  about: string | null;
+  yearsExperience: number | null;
+  isDemo: boolean;
+  memberSince: string;
+};
+
+export type CandidateSkillSummary = { id: string; name: string; domain: string; order: number };
+
+export type CandidateResultRow = {
+  attemptId: string;
+  versionId: string;
+  title: string;
+  companyName: string;
+  jobTitle: string;
+  submittedAt: string | null;
+  reviewedAt: string | null;
+  awarded: number;
+  possible: number;
+  scoredCriteria: number;
+};
+
+export type CandidateProfileResponse = {
+  profile: CandidateProfile;
+  skills: CandidateSkillSummary[];
+  stats: {
+    available: number;
+    inProgress: number;
+    submitted: number;
+    marked: number;
+    awaitingMarks: number;
+    averagePercent: number | null;
+  };
+  results: CandidateResultRow[];
+};
+
+export type CandidateProfileUpdate = {
+  headline?: string;
+  location?: string;
+  about?: string;
+  yearsExperience?: number | null;
+};
+
+/** One post-submission follow-up question, with the candidate's own answer. */
+export type CandidateFollowUp = {
+  criterionId: string;
+  criterion: string;
+  taskTitle: string;
+  reason: string;
+  question: string;
+  answer: string;
+  savedAt: string | null;
+};
+
+export type CandidateFollowUps = {
+  submittedAt: string | null;
+  questions: CandidateFollowUp[];
+  answeredCount: number;
+  total: number;
+};
+
+export type LocationSuggestion = { name: string; region: string; country: string; label: string };

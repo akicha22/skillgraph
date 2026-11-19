@@ -102,7 +102,10 @@ describe("Assessment Assembler", () => {
       mockPrisma(),
     );
     assert.ok(result.tasks.length >= 1);
-    assert.ok(result.tasks[0].title.includes("workplace scenario"));
+    // The fallback must be a specific case, not the old "a realistic situation arises" placeholder.
+    assert.ok(result.tasks[0].title.includes("Unknown Skill"));
+    assert.ok(!result.tasks[0].prompt.includes("A realistic situation arises"));
+    assert.match(result.tasks[0].prompt, /₹[\d.]+/);
   });
 
   it("rejects invalid skill weights", async () => {

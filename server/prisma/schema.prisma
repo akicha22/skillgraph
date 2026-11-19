@@ -14,6 +14,11 @@ model User {
   name         String
   role         String
   isDemo       Boolean  @default(false)
+  // Candidate profile, all optional so existing accounts stay valid.
+  headline        String?
+  location        String?
+  about           String?
+  yearsExperience Int?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   candidateSkills CandidateSkill[]
@@ -22,6 +27,7 @@ model User {
   auditLogs   AuditLog[]
   shortlists  Shortlist[]
   posts       RecruiterPost[]
+  dailyTasks  DailyTask[]
 }
 model SkillDomain {
   id          String   @id @default(cuid())
@@ -50,6 +56,7 @@ model Skill {
   updatedAt       DateTime         @updatedAt
   assessmentVersionSkills AssessmentVersionSkill[]
   assessmentTasks         AssessmentTask[]
+  dailyTasks              DailyTask[]
 
   @@index([domainId])
 }
@@ -182,6 +189,7 @@ model AssessmentAttempt {
   responses   AssessmentResponse[]
   criterionScores AssessmentCriterionScore[]
   shortlistEntries ShortlistEntry[]
+  followUps    AttemptFollowUp[]
 
   // One attempt per candidate per version keeps answers from splitting across duplicates.
   @@unique([versionId, candidateId])
@@ -237,6 +245,10 @@ model RecruiterPost {
   companyName  String
   location     String?
   requirements String
+  // JSON array of skill names the role needs, e.g. ["Negotiation","Excel"].
+  skills       String?
+  experience   String?
+  employmentType String? // FULL_TIME | PART_TIME | CONTRACT | INTERNSHIP | REMOTE
   status       String   @default("OPEN") // OPEN | CLOSED
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -272,6 +284,46 @@ model ShortlistEntry {
 
   @@unique([shortlistId, attemptId])
   @@index([attemptId])
+}
+
+// One candidate's written answer to an interview follow-up question about a submitted attempt.
+// The question itself is derived from the rubric on read, so only the answer is stored.
+model AttemptFollowUp {
+  id          String            @id @default(cuid())
+  attemptId   String
+  attempt     AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  criterionId String
+  answer      String            @default("")
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@unique([attemptId, criterionId])
+  @@index([attemptId])
+}
+
+// A short daily practice task. Practice is never marked and never shown to a recruiter.
+model DailyTask {
+  id              String    @id @default(cuid())
+  candidateId     String
+  candidate       User      @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  skillId         String
+  skill           Skill     @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  day             String // YYYY-MM-DD, the candidate's local calendar day
+  position        Int
+  family          String // SALES | SERVICE | OPERATIONS | DATA | PEOPLE | FINANCE | MARKETING | TECHNICAL | GENERAL
+  title           String
+  scenario        String
+  steps           String // JSON array of three prompts the candidate works through
+  estimateMinutes Int
+  status          String    @default("PENDING") // PENDING | DONE
+  reflection      String    @default("")
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([candidateId, day, position])
+  @@index([candidateId, day])
+  @@index([skillId])
 }
 
 model AuditLog {

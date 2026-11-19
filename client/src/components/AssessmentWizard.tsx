@@ -4,12 +4,14 @@ import { AlertCircle, ArrowLeft, ArrowRight, Scale, Sparkles, Wand2 } from "luci
 import DashboardLayout from "../layouts/DashboardLayout";
 import SkillPicker from "./SkillPicker";
 import { useSkillLibrary } from "../hooks/useSkillLibrary";
-import { generateAssessment, parseRequirements } from "../services/assessments";
+import { clarifyAssessment, generateAssessment, parseRequirements } from "../services/assessments";
 import { ApiError } from "../services/api";
 import {
   DIFFICULTY_LABELS,
   LEVEL_LABELS,
   type AiPolicy,
+  type ClarificationAnswer,
+  type ClarificationQuestion,
   type AssessmentDifficulty,
   type AssessmentLevel,
   type GenerateRequest,
@@ -68,6 +70,11 @@ export default function AssessmentWizard() {
   // Step 2 — skills
   const [parsed, setParsed] = useState<ParsedRequirements | null>(null);
   const [selected, setSelected] = useState<SelectedSkill[]>([]);
+
+  // Clarification: asked only when the brief is missing something the tasks need.
+  const [clarifyQuestions, setClarifyQuestions] = useState<ClarificationQuestion[]>([]);
+  const [clarifyDrafts, setClarifyDrafts] = useState<Record<string, string>>({});
+  const [clarifications, setClarifications] = useState<ClarificationAnswer[]>([]);
 
   // Step 3 — settings
   const [level, setLevel] = useState<AssessmentLevel>("JUNIOR");
@@ -133,19 +140,53 @@ export default function AssessmentWizard() {
     setBusy(true);
     try {
       const result = await parseRequirements(requirementsText.trim());
+      const rows = selectionFromParsed(result);
       setParsed(result);
-      setSelected(selectionFromParsed(result));
+      setSelected(rows);
       if (result.targetLevel) setLevel(result.targetLevel);
       if (result.difficulty) setDifficulty(result.difficulty);
       if (result.durationMinutes) setDurationMinutes(result.durationMinutes);
-      if (result.taskCount) setTaskCount(Math.max(result.taskCount, selectionFromParsed(result).length));
+      if (result.taskCount) setTaskCount(Math.max(result.taskCount, rows.length));
       if (result.jobTitle && jobTitle.trim().length === 0) setJobTitle(result.jobTitle);
-      setStep(2);
+
+      // Ask only for what the brief leaves out. A failed ask never blocks the wizard: the
+      // recruiter simply continues with the brief they wrote.
+      const questions = await clarifyAssessment({
+        requirementsText: requirementsText.trim(),
+        jobTitle: jobTitle.trim() || result.jobTitle || undefined,
+        targetLevel: result.targetLevel ?? undefined,
+        skillSlugs: rows.map((row) => row.skillSlug),
+      })
+        .then((response) => response.questions)
+        .catch(() => [] as ClarificationQuestion[]);
+
+      setClarifications([]);
+      setClarifyDrafts({});
+      if (questions.length > 0) {
+        setClarifyQuestions(questions);
+      } else {
+        setStep(2);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not read the role description.");
     } finally {
       setBusy(false);
     }
+  }
+
+  /** Closes the clarification step and moves on, carrying whatever the recruiter answered. */
+  function continuePastClarifications(skip = false) {
+    const answers: ClarificationAnswer[] = skip
+      ? []
+      : clarifyQuestions
+          .map((question) => ({
+            question: question.question,
+            answer: (clarifyDrafts[question.id] ?? "").trim(),
+          }))
+          .filter((row) => row.answer.length > 0);
+    setClarifications(answers);
+    setClarifyQuestions([]);
+    setStep(2);
   }
 
   function goToSettings() {
@@ -186,6 +227,7 @@ export default function AssessmentWizard() {
         subskills: [],
         source: skill.source,
       })),
+      ...(clarifications.length > 0 ? { clarifications } : {}),
     };
 
     setBusy(true);
@@ -588,6 +630,18 @@ export default function AssessmentWizard() {
                 {aiPolicy === "NOT_ALLOWED" ? "AI not allowed" : "AI allowed if disclosed"}
               </dd>
             </div>
+            {clarifications.length > 0 && (
+              <div className="rounded-xl bg-slate-50 p-3 sm:col-span-2">
+                <dt className="text-slate-500">Extra context you gave</dt>
+                <dd className="mt-1 space-y-1 text-slate-800">
+                  {clarifications.map((row) => (
+                    <p key={row.question}>
+                      <span className="text-slate-500">{row.question}</span> {row.answer}
+                    </p>
+                  ))}
+                </dd>
+              </div>
+            )}
           </dl>
           <div className="flex items-center justify-between">
             <button
@@ -609,6 +663,58 @@ export default function AssessmentWizard() {
             </button>
           </div>
         </section>
+      )}
+      {clarifyQuestions.length > 0 && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="clarify-title"
+        >
+          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl">
+            <h2 id="clarify-title" className="text-lg font-semibold text-slate-900">
+              A few details will make this assessment sharper
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">
+              These are missing from your brief. Answer what you can — the tasks use your answers to
+              build a concrete case instead of a generic one. Nothing here is required.
+            </p>
+            <div className="mt-4 max-h-[55vh] space-y-4 overflow-auto pr-1">
+              {clarifyQuestions.map((question) => (
+                <label key={question.id} className="block text-sm">
+                  <span className="font-medium text-slate-900">{question.question}</span>
+                  <span className="mt-0.5 block text-xs text-slate-500">{question.why}</span>
+                  <input
+                    value={clarifyDrafts[question.id] ?? ""}
+                    onChange={(event) =>
+                      setClarifyDrafts((prev) => ({ ...prev, [question.id]: event.target.value }))
+                    }
+                    maxLength={500}
+                    placeholder={question.placeholder}
+                    className={`mt-1 ${fieldClass}`}
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => continuePastClarifications(true)}
+                className="text-sm font-medium text-slate-500 hover:text-slate-800"
+              >
+                Skip these
+              </button>
+              <button
+                type="button"
+                onClick={() => continuePastClarifications(false)}
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+              >
+                Continue
+                <ArrowRight className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </DashboardLayout>
   );

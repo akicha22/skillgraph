@@ -39,14 +39,20 @@ const DEMO_POSTS = [
     requirements:
       "Two years of operations or data experience, comfortable with spreadsheets and client email. " +
       "You will report on sales, keep delivery dates honest and own the weekly ops review. Start in January.",
+    skills: ["Excel", "Client communication", "Reporting"],
+    experience: "2–4 years",
+    employmentType: "FULL_TIME",
   },
   {
     title: "Data analyst - remote",
     companyName: COMPANY,
-    location: "Remote (India)",
+    location: "Remote — India",
     requirements:
       "SQL and spreadsheets, with the judgement to say when a number looks wrong. " +
       "You will build the monthly sales view, answer questions from the ops team and write short, clear findings.",
+    skills: ["SQL", "Data analysis", "Written communication"],
+    experience: "1–3 years",
+    employmentType: "REMOTE",
   },
 ];
 
@@ -124,9 +130,28 @@ export async function seedDemoPosts(): Promise<{ created: number }> {
       where: { recruiterId: recruiter.id, title: post.title },
       select: { id: true },
     });
-    if (existing) continue;
+    if (existing) {
+      // Backfill the descriptive fields on posts created before they existed. Status and the
+      // recruiter's own edits are left untouched, so a closed post never reopens.
+      await prisma.recruiterPost.updateMany({
+        where: { id: existing.id, skills: null },
+        data: {
+          skills: JSON.stringify(post.skills),
+          experience: post.experience,
+          employmentType: post.employmentType,
+        },
+      });
+      continue;
+    }
     // Demo posts are seeded online; a recruiter can close one from the dashboard afterwards.
-    await prisma.recruiterPost.create({ data: { recruiterId: recruiter.id, ...post, status: "OPEN" } });
+    await prisma.recruiterPost.create({
+      data: {
+        recruiterId: recruiter.id,
+        ...post,
+        skills: JSON.stringify(post.skills),
+        status: "OPEN",
+      },
+    });
     created += 1;
   }
   return { created };

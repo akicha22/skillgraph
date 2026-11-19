@@ -9,6 +9,7 @@ export * from "./fileBlueprints.js";
 export * from "./dataBlueprints.js";
 
 import type { BlueprintContext, BlueprintTask, StructuredResponseBlueprint } from "./types.js";
+import { buildScenarioTask } from "../scenarios.js";
 import {
   buildSalesAnalysisTask,
   buildQuantityEstimationTask,
@@ -78,54 +79,30 @@ export function buildGenericTask(ctx: BlueprintContext): BlueprintTask {
 
   switch (assessmentType) {
     case "STRUCTURED_RESPONSE": {
+      // A concrete case built from the brief: a situation, named constraints, figures and a
+      // deliverable. The old "a realistic situation arises" placeholder is deliberately gone.
       const skillName = ctx.skillName?.trim() || "the skill";
-      const jobTitle = ctx.jobTitle?.trim() || "the role";
-      const companyName = ctx.companyName?.trim() || "the company";
-
-      const prompt = `You are a ${jobTitle} at ${companyName}. A realistic situation arises that requires ${skillName}. Explain, step by step, how you would handle it. Be specific about the actions you would take, the people you would involve, and the information you would need. Write at most 300 words.`;
-
-      const rubric = [
-        {
-          name: "Understands the situation",
-          description: "Shows clear grasp of the scenario and its constraints.",
-          maxMarks: 25,
-          privateGuidance: "Strong answers restate the problem in their own words, identify stakeholders, and note key constraints. Weak answers dive into solutions without showing they understood the situation.",
-        },
-        {
-          name: "Quality of reasoning and approach",
-          description: "Logical, structured reasoning with a practical methodology.",
-          maxMarks: 30,
-          privateGuidance: "Strong answers use a clear framework (e.g., gather info → analyze → decide → act → follow up), justify each step, and anticipate risks. Weak answers are a list of actions without reasoning, or jump to a solution without analysis.",
-        },
-        {
-          name: "Practical, specific actions",
-          description: "Concrete, actionable steps tied to the scenario.",
-          maxMarks: 25,
-          privateGuidance: "Strong answers name specific actions: 'email the vendor with these three questions,' 'pull the last three months of data,' 'schedule a 15-min call with the PM.' Weak answers use vague verbs: 'communicate,' 'analyze,' 'coordinate' without specifics.",
-        },
-        {
-          name: "Clear communication",
-          description: "Well-structured, concise, and professional writing.",
-          maxMarks: 20,
-          privateGuidance: "Strong answers use paragraphs, bullet points for steps, and professional tone within 300 words. Weak answers are a wall of text, exceed the word limit, or use informal language.",
-        },
-      ];
+      const scenario = buildScenarioTask({
+        seed: ctx.seed,
+        skillSlug: ctx.skillSlug ?? "general",
+        skillName,
+        jobTitle: ctx.jobTitle,
+        companyName: ctx.companyName,
+        requirementsText: ctx.requirementsText,
+        level: ctx.level,
+        difficulty: ctx.difficulty,
+      });
 
       return {
         type: "STRUCTURED_RESPONSE",
-        skillSlug: ctx.skillSlug,
-        title: `${skillName}: workplace scenario`,
-        prompt,
+        skillSlug: ctx.skillSlug ?? "general",
+        title: scenario.title,
+        prompt: scenario.prompt,
         marks: 100,
         timeMinutes: 20,
-        publicData: {
-          wordLimit: 300,
-        },
-        privateData: {
-          evaluation: "RUBRIC_REVIEW",
-          generic: true,
-        },
-        rubric,
+        publicData: scenario.publicData,
+        privateData: scenario.privateData,
+        rubric: scenario.rubric,
         isGeneric: true,
         timeWeight: 2,
       } as StructuredResponseBlueprint;
