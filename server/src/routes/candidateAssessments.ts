@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { serializeCandidateVersion } from "../assessments/candidateView";
 import { prisma } from "../db";
 import { currentUser, requireAuth, requireRole } from "../middleware/auth";
 import { asyncHandler } from "../utils/asyncHandler";
@@ -9,86 +10,6 @@ candidateAssessmentsRouter.use(requireAuth, requireRole("CANDIDATE"));
 // Express 5 types route params as string | string[]; these routes only ever take one value.
 function routeParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
-}
-
-function parseData(value: string): Record<string, unknown> {
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-type CandidateVersionRecord = {
-  title: string;
-  description: string;
-  jobContext: string;
-  candidateInstructions: string;
-  targetLevel: string;
-  difficulty: string;
-  aiPolicy: string;
-  durationMinutes: number;
-  assessment: { jobTitle: string; companyName: string };
-  tasks: {
-    id: string;
-    position: number;
-    type: string;
-    title: string;
-    prompt: string;
-    marks: number;
-    timeMinutes: number;
-    publicData: string;
-    skill: { name: string };
-    rubric: { position: number; name: string; description: string; maxMarks: number }[];
-  }[];
-};
-
-/**
- * Builds the candidate's view from an allowlist, so privateData, privateGuidance, the answer
- * key and the recruiter's brief can never reach a candidate by being spread in by mistake.
- * Only fields the candidate page renders are included.
- *
- * Until the candidate starts, each task is described by its topic alone: title, prompt, data and
- * criteria stay on the server, so a question cannot be read before the assessment is taken.
- */
-function serializeCandidateVersion(version: CandidateVersionRecord, started: boolean) {
-  return {
-    title: version.title,
-    description: version.description,
-    jobContext: version.jobContext,
-    candidateInstructions: version.candidateInstructions,
-    targetLevel: version.targetLevel,
-    difficulty: version.difficulty,
-    aiPolicy: version.aiPolicy,
-    durationMinutes: version.durationMinutes,
-    assessment: {
-      jobTitle: version.assessment.jobTitle,
-      companyName: version.assessment.companyName,
-    },
-    started,
-    tasks: version.tasks.map((task) => ({
-      id: task.id,
-      position: task.position,
-      type: task.type,
-      skillName: task.skill.name,
-      marks: task.marks,
-      timeMinutes: task.timeMinutes,
-      title: started ? task.title : null,
-      prompt: started ? task.prompt : null,
-      publicData: started ? parseData(task.publicData) : {},
-      rubric: started
-        ? task.rubric.map((criterion) => ({
-            position: criterion.position,
-            name: criterion.name,
-            description: criterion.description,
-            maxMarks: criterion.maxMarks,
-          }))
-        : [],
-    })),
-  };
 }
 
 // The published versions a candidate can open, newest first; drafts never appear here.
