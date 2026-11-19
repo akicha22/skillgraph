@@ -171,6 +171,11 @@ candidateTasksRouter.get(
 const completeSchema = z
   .object({
     done: z.boolean(),
+    answer: z
+      .string()
+      .trim()
+      .max(1000, "Keep your answer under 1000 characters")
+      .optional(),
     reflection: z
       .string()
       .trim()
@@ -179,7 +184,12 @@ const completeSchema = z
   })
   .strict();
 
-// Marks a drill done (with an optional one-line note) or reopens it. Only the candidate's own task.
+// Tracks attempt count for point allocation.
+// - First time marking done: full points (difficulty-based: 5/10/15)
+// - Re-marking done after already done: half points (floor)
+// - Reopening a done task resets attempt count and points to 0
+// - Answer submission does not require validation against a key;
+//   any answer is accepted and the task is marked done based on the 'done' flag.
 candidateTasksRouter.put(
   "/:taskId",
   asyncHandler(async (req, res) => {
@@ -193,19 +203,53 @@ candidateTasksRouter.put(
     const candidateId = currentUser(res).id;
     const task = await prisma.dailyTask.findFirst({
       where: { id: taskId, candidateId },
-      select: { id: true, reflection: true },
+      select: {
+        id: true,
+        status: true,
+        done: true,
+        completedAt: true,
+        reflection: true,
+        points: true,
+        skillId: true,
+        position: true,
+      },
     });
     if (!task) {
       res.status(404).json({ error: "Task not found" });
       return;
     }
 
+    // Compute new status and points based on the done flag and current state
+    let status: "PENDING" | "DONE";
+    let points: number | null = task.points;
+
+    if (parsed.data.done) {
+      // Marking done: award full points if this is the first time marking done,
+      // otherwise half points (floor) of the original task points on re-attempt.
+      // task.done is true when the task was previously marked done; task.status indicates current state.
+      if (!task.done) {
+        // First time marking done: full points
+        points = task.points;
+      } else {
+        // Re-attempt after already having been done: halve the points (floor)
+        points = Math.max(1, Math.floor(task.points / 2));
+      }
+      status = "DONE";
+    } else {
+      // Reopening a done task: reset points and status to PENDING
+      if (task.status === "DONE") {
+        points = 0;
+      }
+      status = "PENDING";
+    }
+
     const updated = await prisma.dailyTask.update({
       where: { id: task.id },
       data: {
-        status: parsed.data.done ? "DONE" : "PENDING",
+        status,
         completedAt: parsed.data.done ? new Date() : null,
         reflection: parsed.data.reflection ?? task.reflection,
+        points,
       },
       include: { skill: { select: { name: true } } },
     });
