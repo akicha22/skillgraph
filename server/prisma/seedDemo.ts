@@ -30,6 +30,26 @@ const SHORTLIST_NOTE =
 // Marks are a share of each criterion, varied per criterion so the totals look like real marking.
 const MARK_SHARES = [0.9, 0.75, 0.8, 0.6];
 
+/** A couple of open roles, so the candidate dashboard's posts section is never empty. */
+const DEMO_POSTS = [
+  {
+    title: "Operations analyst - Bengaluru",
+    companyName: COMPANY,
+    location: "On-site, Bengaluru",
+    requirements:
+      "Two years of operations or data experience, comfortable with spreadsheets and client email. " +
+      "You will report on sales, keep delivery dates honest and own the weekly ops review. Start in January.",
+  },
+  {
+    title: "Data analyst - remote",
+    companyName: COMPANY,
+    location: "Remote (India)",
+    requirements:
+      "SQL and spreadsheets, with the judgement to say when a number looks wrong. " +
+      "You will build the monthly sales view, answer questions from the ops team and write short, clear findings.",
+  },
+];
+
 export type DemoSeedSummary = {
   created: boolean;
   assessmentId?: string;
@@ -88,6 +108,27 @@ function answerFor(privateData: Record<string, unknown>, strong: boolean): strin
   return strong
     ? "I would name the problem in the first line, give the client the new date and the reason, then close with one concrete next step and who owns it."
     : "I would reply to the client and explain what happened as soon as I could.";
+}
+
+/** Creates the demo posts once; a post with the same title and owner is left alone. */
+export async function seedDemoPosts(): Promise<{ created: number }> {
+  const recruiter = await prisma.user.findUnique({
+    where: { email: RECRUITER_EMAIL },
+    select: { id: true },
+  });
+  if (!recruiter) throw new Error(`Demo recruiter ${RECRUITER_EMAIL} is missing; run the seed again.`);
+
+  let created = 0;
+  for (const post of DEMO_POSTS) {
+    const existing = await prisma.recruiterPost.findFirst({
+      where: { recruiterId: recruiter.id, title: post.title },
+      select: { id: true },
+    });
+    if (existing) continue;
+    await prisma.recruiterPost.create({ data: { recruiterId: recruiter.id, ...post } });
+    created += 1;
+  }
+  return { created };
 }
 
 export async function seedDemoAssessment(): Promise<DemoSeedSummary> {

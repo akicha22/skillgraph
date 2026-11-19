@@ -18,6 +18,7 @@ file than the one being served:
 | Submission A | Arjun Shetty (`candidate1`) — submitted, **fully marked**, `reviewedAt` set |
 | Submission B | Meera Kulkarni (`candidate2`) — submitted, **not marked**, so marking can be demonstrated live |
 | Shortlist | "Operations analyst - shortlist" holding Arjun, with a private note |
+| Requirements posts | Two open roles (operations analyst in Bengaluru, remote data analyst) shown on every candidate dashboard |
 
 The tasks, rubrics and answer keys come from the same template assembler the app uses. The marks on
 Submission A are sample marks placed by the seed — the app computes totals, coverage and follow-ups,

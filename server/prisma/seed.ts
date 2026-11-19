@@ -2,7 +2,7 @@ import "dotenv/config";
 import { prisma } from "../src/db";
 import { hashPassword } from "../src/auth/password";
 import { seedSkills } from "./seedSkills";
-import { seedDemoAssessment } from "./seedDemo";
+import { seedDemoAssessment, seedDemoPosts } from "./seedDemo";
 
 const DEMO_PASSWORD = "Demo@12345";
 
@@ -38,6 +38,13 @@ async function main() {
     demo.created
       ? `Demo assessment ready and published: ${demo.assessmentId}`
       : "Demo assessment already present — skipped.",
+  );
+
+  const posts = await seedDemoPosts();
+  console.log(
+    posts.created > 0
+      ? `Demo requirements posts ready: ${posts.created} created.`
+      : "Demo requirements posts already present — skipped.",
   );
 }
 

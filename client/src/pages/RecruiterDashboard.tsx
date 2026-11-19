@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, ArrowRight, Megaphone, Plus, Trash2 } from "lucide-react";
+import PermissionCheck from "../components/PermissionCheck";
 import { useAuth } from "../hooks/useAuth";
 import DashboardLayout from "../layouts/DashboardLayout";
 import {
@@ -293,6 +294,7 @@ export default function RecruiterDashboard() {
           </ul>
         )}
       </div>
+      <PermissionCheck />
     </DashboardLayout>
   );
 }

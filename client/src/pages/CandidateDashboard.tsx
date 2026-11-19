@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckCircle2, ClipboardList, Megaphone } from "lucide-react";
+import PermissionCheck from "../components/PermissionCheck";
 import { useAuth } from "../hooks/useAuth";
 import DashboardLayout from "../layouts/DashboardLayout";
 import { listCandidateAssessments, listCandidatePosts } from "../services/assessments";
@@ -188,6 +189,7 @@ export default function CandidateDashboard() {
           </ul>
         )}
       </section>
+      <PermissionCheck />
     </DashboardLayout>
   );
 }
