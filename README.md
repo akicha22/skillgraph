@@ -53,6 +53,9 @@ generation falls back to template wording and the response says so instead of cl
 (`candidate1..3@skillgraph.test`). The seed script prints their shared demo password; accounts are
 flagged `isDemo` and the UI shows it.
 
+The same seed also publishes a demo assessment with two submissions and a shortlist, so every
+screen has something to show. [DEMO.md](DEMO.md) walks through the product with it.
+
 ## Assessment lifecycle
 
 1. **Brief** — the recruiter describes the role; the parser proposes skills, level and duration.
