@@ -90,7 +90,6 @@ export function buildGenericTask(ctx: BlueprintContext): BlueprintTask {
         companyName: ctx.companyName,
         requirementsText: ctx.requirementsText,
         level: ctx.level,
-        difficulty: ctx.difficulty,
       });
 
       return {

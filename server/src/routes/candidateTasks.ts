@@ -28,7 +28,6 @@ function parseSteps(value: string): string[] {
 function serializeTask(task: {
   id: string;
   position: number;
-  family: string;
   title: string;
   scenario: string;
   steps: string;
@@ -41,7 +40,6 @@ function serializeTask(task: {
   return {
     id: task.id,
     position: task.position,
-    family: task.family,
     title: task.title,
     skillName: task.skill.name,
     scenario: task.scenario,

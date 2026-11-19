@@ -30,8 +30,9 @@ const PRODUCT_WORDS =
   /software|saas|platform|apparel|clothing|fashion|fmcg|consumer goods|industrial|equipment|machine|logistic|freight|insurance|policy|course|training|pharma|health|bank|loan|credit|hotel|hospitality|travel|property|retail|store|product|service/;
 const MARKET_WORDS =
   /\bb2b\b|\bb2c\b|\bd2c\b|enterprise|corporate|consumer|smb\b|sme\b|small business|export|international|government|public sector|tender|mid-market|regional/;
-const TEAM_WORDS = /team|manage|manag|lead|report|supervis|headcount|hire|individual contributor/;
-const SCALE_WORDS = /(₹|rs\.?|inr|%|\blakh\b|\bcrore\b|\d+\s*(?:k|thousand|users|orders|customers|units|people|members))/i;
+const TEAM_WORDS = /team|manage|manag|lead|reports to|supervis|headcount|hire|individual contributor/;
+// Any two-digit figure counts as scale; "40 reports" is as concrete as "₹25 lakh" for the task.
+const SCALE_WORDS = /(₹|rs\.?|inr|%|\blakh\b|\bcrore\b|\d{2,})/i;
 const TOOL_WORDS =
   /excel|sql|python|javascript|typescript|tableau|power bi|looker|salesforce|hubspot|jira|figma|autocad|git|aws|azure|gcp|sap|tally|zoho|notion|sheets/;
 
@@ -85,11 +86,6 @@ function has(text: string, pattern: RegExp): boolean {
   return pattern.test(text);
 }
 
-/** True when the brief already contains at least one figure, so scale is not missing. */
-export function briefHasFigures(text: string): boolean {
-  return has(text, SCALE_WORDS);
-}
-
 /**
  * The questions worth asking for this brief, most useful first. An empty array means the brief
  * already carries enough detail and the recruiter should not be interrupted.
@@ -112,7 +108,7 @@ export function clarificationQuestions(input: ClarificationInput): Clarification
     team:
       !has(lower, TEAM_WORDS) &&
       (level === "SENIOR" || level === "MID" || /head|lead|manager|director|vp|chief/.test(role)),
-    scale: !briefHasFigures(text),
+    scale: !has(text, SCALE_WORDS),
     tools: !has(lower, TOOL_WORDS),
   };
 
@@ -123,11 +119,6 @@ export function clarificationQuestions(input: ClarificationInput): Clarification
     if (id === "tools" && family !== "DATA" && family !== "TECHNICAL" && family !== "FINANCE") continue;
     questions.push(QUESTIONS[id]);
     if (questions.length === 3) break;
-  }
-
-  // A brief this short is missing context of some kind; the role question is the safest single ask.
-  if (questions.length === 0 && text.length < 80) {
-    questions.push(QUESTIONS.scale);
   }
 
   return questions;

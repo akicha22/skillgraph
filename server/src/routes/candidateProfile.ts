@@ -73,7 +73,6 @@ candidateProfileRouter.get(
         select: {
           id: true,
           status: true,
-          startedAt: true,
           submittedAt: true,
           reviewedAt: true,
           criterionScores: { select: { marks: true } },
@@ -81,7 +80,6 @@ candidateProfileRouter.get(
             select: {
               id: true,
               title: true,
-              publishedAt: true,
               assessment: { select: { companyName: true, jobTitle: true } },
               tasks: { select: { marks: true } },
             },
@@ -120,11 +118,10 @@ candidateProfileRouter.get(
         isDemo: user.isDemo,
         memberSince: user.createdAt,
       },
-      skills: skillRows.map((row, index) => ({
+      skills: skillRows.map((row) => ({
         id: row.skill.id,
         name: row.skill.name,
         domain: row.skill.domain.name,
-        order: index,
       })),
       stats: {
         available: versions.filter((version) => !attemptByVersion.has(version.id)).length,

@@ -14,18 +14,8 @@ export default function CandidateTasks() {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-
-  function load() {
-    return listCandidateTasks()
-      .then((loaded) => {
-        setData(loaded);
-        setNotes(Object.fromEntries(loaded.tasks.map((task) => [task.id, task.reflection])));
-        setError(null);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Could not load today's tasks.");
-      });
-  }
+  // Bumped after a change so the one loader below re-reads the streak and the seven-day strip.
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,6 +24,7 @@ export default function CandidateTasks() {
         if (cancelled) return;
         setData(loaded);
         setNotes(Object.fromEntries(loaded.tasks.map((task) => [task.id, task.reflection])));
+        setError(null);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -42,15 +33,14 @@ export default function CandidateTasks() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadToken]);
 
   async function toggle(taskId: string, done: boolean) {
     setBusyId(taskId);
     setNotice(null);
     try {
       await completeCandidateTask(taskId, done, notes[taskId] ?? "");
-      // Re-read so the streak and the seven-day strip reflect the change immediately.
-      await load();
+      setReloadToken((token) => token + 1);
       setNotice(done ? "Marked done. Small, regular practice is what moves the needle." : "Reopened.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update that task.");

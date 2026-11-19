@@ -9,8 +9,6 @@ type Props = {
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
-  /** Called after a suggestion is picked, for forms that want to react immediately. */
-  onSelect?: (location: LocationSuggestion) => void;
 };
 
 /**
@@ -23,7 +21,6 @@ export default function LocationInput({
   onChange,
   placeholder = "Start typing a city",
   className = "",
-  onSelect,
 }: Props) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
@@ -65,7 +62,6 @@ export default function LocationInput({
 
   function choose(location: LocationSuggestion) {
     onChange(location.name);
-    onSelect?.(location);
     setOpen(false);
     setActiveIndex(-1);
   }

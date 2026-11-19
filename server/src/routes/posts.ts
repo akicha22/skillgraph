@@ -22,8 +22,7 @@ function routeParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
 }
 
-export const EMPLOYMENT_TYPES = ["FULL_TIME", "PART_TIME", "CONTRACT", "INTERNSHIP", "REMOTE"] as const;
-export type EmploymentType = (typeof EMPLOYMENT_TYPES)[number];
+const EMPLOYMENT_TYPES = ["FULL_TIME", "PART_TIME", "CONTRACT", "INTERNSHIP", "REMOTE"] as const;
 
 const postFields = {
   title: z.string().trim().min(3, "Give the post a title").max(100),
@@ -74,7 +73,7 @@ type PostRow = {
   employmentType: string | null;
   status: string;
   createdAt: Date;
-  updatedAt?: Date;
+  updatedAt: Date;
 };
 
 /** Skills are stored as JSON text; the API always speaks arrays. */
@@ -100,7 +99,7 @@ function serializePost(post: PostRow) {
     employmentType: post.employmentType,
     status: post.status,
     createdAt: post.createdAt,
-    updatedAt: post.updatedAt ?? post.createdAt,
+    updatedAt: post.updatedAt,
   };
 }
 

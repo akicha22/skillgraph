@@ -166,7 +166,7 @@ export function detectFamily(skillSlug: string, skillName: string, brief = ""): 
 }
 
 /** Facts lifted from the recruiter's brief, with deterministic defaults where it is silent. */
-export type ScenarioFacts = {
+type ScenarioFacts = {
   role: string;
   company: string;
   product: string;
@@ -265,7 +265,7 @@ function seeded(seed: number, position: number): number {
   return Math.abs(Math.floor(x)) % 1000;
 }
 
-export function readScenarioFacts(input: {
+function readScenarioFacts(input: {
   jobTitle?: string;
   companyName?: string;
   requirementsText?: string;
@@ -444,7 +444,7 @@ const TEMPLATES: Record<SkillFamily, ScenarioTemplate> = {
       },
     ],
     keyFacts: (facts) => [
-      facts.brief ? `Customer context drawn from the brief` : "Long-standing customer, repeated failure",
+      "Long-standing customer, repeated failure",
       "Refund approval above ₹15,000 needs a manager",
       "Warehouse closed for two days",
       "Customer's own deadline is Friday",
@@ -945,13 +945,11 @@ const TEMPLATES: Record<SkillFamily, ScenarioTemplate> = {
 };
 
 export type ScenarioTask = {
-  family: SkillFamily;
   title: string;
   prompt: string;
   publicData: Record<string, unknown>;
   privateData: Record<string, unknown>;
   rubric: Criterion[];
-  facts: ScenarioFacts;
 };
 
 /**
@@ -965,7 +963,6 @@ export function buildScenarioTask(input: {
   companyName?: string;
   requirementsText?: string;
   level?: string;
-  difficulty?: string;
 }): ScenarioTask {
   const family = detectFamily(input.skillSlug, input.skillName, input.requirementsText ?? "");
   const facts = readScenarioFacts({
@@ -983,19 +980,17 @@ export function buildScenarioTask(input: {
   const prompt = `${template.body(facts, variant)}\n\n${template.deliverable}`;
 
   return {
-    family,
     title,
     // The scenario always ends with an explicit deliverable, so the instruction is never vague.
     prompt,
-    publicData: { wordLimit: 500 },
+    // No data table to show: the figures live in the prompt, where the candidate reads them.
+    publicData: {},
     privateData: {
       evaluation: "RUBRIC_REVIEW",
       keyFacts: template.keyFacts(facts),
       redFlags: template.redFlags,
-      strongAnswerSignals: template.criteria(facts).map((criterion) => criterion.name),
     },
     rubric: template.criteria(facts),
-    facts,
   };
 }
 

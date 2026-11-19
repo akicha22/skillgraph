@@ -29,6 +29,7 @@ const fixture = {
   recruiterACookie: "",
   recruiterBCookie: "",
   candidateACookie: "",
+  candidateBCookie: "",
   attemptA: "",
   attemptB: "",
   versionA: "",
@@ -231,6 +232,7 @@ before(async () => {
   fixture.recruiterACookie = await signIn("recruiter.a@permissions.test");
   fixture.recruiterBCookie = await signIn("recruiter.b@permissions.test");
   fixture.candidateACookie = await signIn("candidate.a@permissions.test");
+  fixture.candidateBCookie = await signIn("candidate.b@permissions.test");
 });
 
 after(async () => {
@@ -395,5 +397,122 @@ describe("the owner still has access", () => {
       (await get(`/api/candidate/attempts/${fixture.attemptB}`, fixture.candidateACookie)).status,
       404,
     );
+  });
+});
+
+describe("interview follow-ups", () => {
+  async function criterionOfVersionA() {
+    const criterion = await prisma.assessmentRubricCriterion.findFirst({
+      where: { task: { versionId: fixture.versionA } },
+      select: { id: true },
+    });
+    assert.ok(criterion, "the fixture assessment needs a criterion");
+    return criterion;
+  }
+
+  it("is candidate-only", async () => {
+    assert.equal((await get(`/api/candidate/attempts/${fixture.attemptA}/follow-ups`)).status, 401);
+    assert.equal(
+      (
+        await get(
+          `/api/candidate/attempts/${fixture.attemptA}/follow-ups`,
+          fixture.recruiterACookie,
+        )
+      ).status,
+      403,
+    );
+  });
+
+  it("gives the candidate one question taken from the rubric", async () => {
+    const res = await get(
+      `/api/candidate/attempts/${fixture.attemptA}/follow-ups`,
+      fixture.candidateACookie,
+    );
+    assert.equal(res.status, 200);
+    const body = res.body as {
+      total: number;
+      answeredCount: number;
+      questions: { criterion: string; answer: string }[];
+    };
+    assert.equal(body.total, 1);
+    assert.equal(body.answeredCount, 0);
+    assert.equal(body.questions[0].criterion, "States the delay clearly");
+    assert.equal(body.questions[0].answer, "");
+  });
+
+  it("hides another candidate's questions behind 404", async () => {
+    const read = await get(
+      `/api/candidate/attempts/${fixture.attemptA}/follow-ups`,
+      fixture.candidateBCookie,
+    );
+    assert.equal(read.status, 404);
+    const write = await put(
+      `/api/candidate/attempts/${fixture.attemptA}/follow-ups/anything`,
+      fixture.candidateBCookie,
+      { answer: "not mine" },
+    );
+    assert.equal(write.status, 404);
+  });
+
+  it("rejects a criterion from outside this assessment", async () => {
+    const res = await put(
+      `/api/candidate/attempts/${fixture.attemptA}/follow-ups/not-a-criterion`,
+      fixture.candidateACookie,
+      { answer: "x" },
+    );
+    assert.equal(res.status, 404);
+  });
+
+  it("stays closed until the attempt is submitted", async () => {
+    await prisma.assessmentAttempt.update({
+      where: { id: fixture.attemptB },
+      data: { status: "IN_PROGRESS", submittedAt: null },
+    });
+    try {
+      const res = await get(
+        `/api/candidate/attempts/${fixture.attemptB}/follow-ups`,
+        fixture.candidateBCookie,
+      );
+      assert.equal(res.status, 409);
+    } finally {
+      await prisma.assessmentAttempt.update({
+        where: { id: fixture.attemptB },
+        data: { status: "SUBMITTED", submittedAt: new Date("2026-01-03T10:00:00Z") },
+      });
+    }
+  });
+
+  it("saves the answer and shows it to the recruiter", async () => {
+    const criterion = await criterionOfVersionA();
+    const answer = "I would name the delay, give the new date and offer a partial delivery.";
+    const saved = await put(
+      `/api/candidate/attempts/${fixture.attemptA}/follow-ups/${criterion.id}`,
+      fixture.candidateACookie,
+      { answer },
+    );
+    assert.equal(saved.status, 200);
+    assert.equal((saved.body as { answer: string }).answer, answer);
+
+    const own = await get(
+      `/api/candidate/attempts/${fixture.attemptA}/follow-ups`,
+      fixture.candidateACookie,
+    );
+    const stated = own.body as { answeredCount: number; questions: { answer: string }[] };
+    assert.equal(stated.answeredCount, 1);
+    assert.equal(stated.questions[0].answer, answer);
+
+    const submission = await get(
+      `/api/recruiter/attempts/${fixture.attemptA}`,
+      fixture.recruiterACookie,
+    );
+    assert.equal(submission.status, 200);
+    const followUps = (
+      submission.body as {
+        followUpQuestions: { criterionId: string; candidateAnswer: string | null }[];
+      }
+    ).followUpQuestions;
+    assert.equal(followUps.length, 1);
+    assert.equal(followUps[0].criterionId, criterion.id);
+    assert.equal(followUps[0].candidateAnswer, answer);
   });
 });

@@ -572,7 +572,6 @@ export type CandidateAssessmentDetail = {
 export type DailyTask = {
   id: string;
   position: number;
-  family: string;
   title: string;
   skillName: string;
   scenario: string;
@@ -605,7 +604,7 @@ export type CandidateProfile = {
   memberSince: string;
 };
 
-export type CandidateSkillSummary = { id: string; name: string; domain: string; order: number };
+export type CandidateSkillSummary = { id: string; name: string; domain: string };
 
 export type CandidateResultRow = {
   attemptId: string;

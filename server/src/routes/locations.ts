@@ -138,8 +138,14 @@ const POPULAR = [
 export const locationsRouter = Router();
 locationsRouter.use(requireAuth);
 
-function label(place: Place): string {
-  return `${place.name}, ${place.region}`;
+// Aliases are for matching only; responses carry just what a suggestion needs to render.
+function suggestion(place: Place) {
+  return {
+    name: place.name,
+    region: place.region,
+    country: place.country,
+    label: `${place.name}, ${place.region}`,
+  };
 }
 
 // Ranked suggestions: exact prefix first, then word-start matches, then substring matches.
@@ -153,7 +159,7 @@ locationsRouter.get(
       res.json({
         locations: POPULAR.map((name) => PLACES.find((place) => place.name === name))
           .filter((place): place is Place => Boolean(place))
-          .map((place) => ({ ...place, label: label(place) })),
+          .map(suggestion),
       });
       return;
     }
@@ -178,7 +184,7 @@ locationsRouter.get(
       .slice(0, 8);
 
     res.json({
-      locations: scored.map(({ place }) => ({ ...place, label: label(place) })),
+      locations: scored.map(({ place }) => suggestion(place)),
     });
   }),
 );
