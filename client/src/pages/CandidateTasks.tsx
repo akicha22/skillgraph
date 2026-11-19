@@ -172,6 +172,9 @@ export default function CandidateTasks() {
                     <Clock className="h-3.5 w-3.5" aria-hidden />
                     about {task.estimateMinutes} min
                   </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-medium text-indigo-800">
+                    {task.difficulty} · {task.points} pts
+                  </span>
                 </div>
 
                 <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-slate-700">

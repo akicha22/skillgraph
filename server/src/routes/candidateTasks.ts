@@ -10,7 +10,7 @@ import { buildDailyTasks, dayKey, shiftDayKey } from "../tasks/practice";
  * Daily practice tasks for a candidate.
  *
  * These are preparation, not evaluation: no marks, no rubric, no attempt record and nothing a
- * recruiter can read. A set of three drills is generated from the candidate's own skills the first
+ * recruiter can read. A set of ten drills is generated from the candidate's own skills the first
  * time they open the page on a given day, then stored so it stays identical for that day.
  */
 export const candidateTasksRouter = Router();

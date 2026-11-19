@@ -577,6 +577,8 @@ export type DailyTask = {
   scenario: string;
   steps: string[];
   estimateMinutes: number;
+  points: number;
+  difficulty: "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
   status: "PENDING" | "DONE";
   reflection: string;
   completedAt: string | null;
