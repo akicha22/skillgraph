@@ -9,6 +9,7 @@ import {
   deleteRecruiterPost,
   listAssessments,
   listMyPosts,
+  setRecruiterPostStatus,
 } from "../services/assessments";
 import type { AssessmentSummary, RecruiterPost } from "../types/assessments";
 
@@ -22,6 +23,7 @@ export default function RecruiterDashboard() {
   const [postNotice, setPostNotice] = useState<string | null>(null);
   const [creatingPost, setCreatingPost] = useState(false);
   const [removingPostId, setRemovingPostId] = useState<string | null>(null);
+  const [updatingPostId, setUpdatingPostId] = useState<string | null>(null);
   const [postForm, setPostForm] = useState({
     title: "",
     companyName: "",
@@ -86,6 +88,26 @@ export default function RecruiterDashboard() {
       setPostError(err instanceof Error ? err.message : "Could not publish this post.");
     } finally {
       setCreatingPost(false);
+    }
+  }
+
+  async function togglePostStatus(post: RecruiterPost) {
+    const next = post.status === "OPEN" ? "CLOSED" : "OPEN";
+    setUpdatingPostId(post.id);
+    setPostError(null);
+    setPostNotice(null);
+    try {
+      const updated = await setRecruiterPostStatus(post.id, next);
+      setPosts((prev) => prev.map((entry) => (entry.id === post.id ? updated.post : entry)));
+      setPostNotice(
+        next === "OPEN"
+          ? "Post reopened — candidates can see it again."
+          : "Post closed — it is hidden from candidates but kept here.",
+      );
+    } catch (err) {
+      setPostError(err instanceof Error ? err.message : "Could not change this post's status.");
+    } finally {
+      setUpdatingPostId(null);
     }
   }
 
@@ -186,7 +208,7 @@ export default function RecruiterDashboard() {
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-lg font-semibold text-slate-900">Requirements posts</h2>
           <span className="text-sm text-slate-500">
-            {posts.length} {posts.length === 1 ? "post" : "posts"}
+            {posts.filter((post) => post.status === "OPEN").length} open of {posts.length}
           </span>
         </div>
         <p className="mt-1 max-w-3xl text-sm text-slate-600">
@@ -270,7 +292,18 @@ export default function RecruiterDashboard() {
             {posts.map((post) => (
               <li key={post.id} className="flex flex-wrap items-start justify-between gap-3 py-3">
                 <div className="min-w-0">
-                  <p className="font-medium text-slate-900">{post.title}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium text-slate-900">{post.title}</p>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        post.status === "OPEN"
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {post.status === "OPEN" ? "Open" : "Closed"}
+                    </span>
+                  </div>
                   <p className="mt-0.5 text-xs text-slate-500">
                     {post.companyName}
                     {post.location ? ` · ${post.location}` : ""} ·{" "}
@@ -280,15 +313,29 @@ export default function RecruiterDashboard() {
                     {post.requirements}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void removePost(post)}
-                  disabled={removingPostId === post.id}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
-                >
-                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                  {removingPostId === post.id ? "Removing…" : "Remove"}
-                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void togglePostStatus(post)}
+                    disabled={updatingPostId === post.id}
+                    className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    {updatingPostId === post.id
+                      ? "Saving…"
+                      : post.status === "OPEN"
+                        ? "Close post"
+                        : "Reopen post"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void removePost(post)}
+                    disabled={removingPostId === post.id}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                    {removingPostId === post.id ? "Removing…" : "Remove"}
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

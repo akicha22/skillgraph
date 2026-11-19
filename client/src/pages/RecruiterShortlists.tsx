@@ -8,6 +8,7 @@ import {
   getShortlist,
   listShortlists,
   removeShortlistEntry,
+  renameShortlist,
   saveShortlistNote,
 } from "../services/assessments";
 import type { ShortlistDetail, ShortlistSummary } from "../types/assessments";
@@ -34,6 +35,11 @@ export default function RecruiterShortlists() {
   const [noteError, setNoteError] = useState<string | null>(null);
   const [removingEntryId, setRemovingEntryId] = useState<string | null>(null);
   const [deletingList, setDeletingList] = useState(false);
+
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [savingRename, setSavingRename] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
 
   // The selected list lives in the URL, so a shortlist can be linked to directly.
   const selectedId = params.get("list") ?? shortlists?.[0]?.id ?? "";
@@ -64,6 +70,9 @@ export default function RecruiterShortlists() {
         setNoteError(null);
         setSavedEntryId(null);
         setNoteDrafts(Object.fromEntries(loaded.entries.map((entry) => [entry.id, entry.note])));
+        setRenameOpen(false);
+        setRenameDraft(loaded.name);
+        setRenameError(null);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -129,6 +138,26 @@ export default function RecruiterShortlists() {
       setNoteError(err instanceof Error ? err.message : "Could not remove this candidate.");
     } finally {
       setRemovingEntryId(null);
+    }
+  }
+
+  async function handleRename(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedId || !loadedDetail) return;
+    const name = renameDraft.trim();
+    if (!name || name === loadedDetail.name) return;
+    setSavingRename(true);
+    setRenameError(null);
+    try {
+      const updated = await renameShortlist(selectedId, name);
+      setDetail(updated);
+      setRenameDraft(updated.name);
+      setRenameOpen(false);
+      await refreshList();
+    } catch (err) {
+      setRenameError(err instanceof Error ? err.message : "Could not rename this shortlist.");
+    } finally {
+      setSavingRename(false);
     }
   }
 
@@ -249,14 +278,67 @@ export default function RecruiterShortlists() {
             {loadedDetail && (
               <section className="rounded-2xl border border-slate-200 bg-white p-6">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-lg font-semibold text-slate-900">{loadedDetail.name}</h2>
+                  <div className="min-w-0">
+                    {renameOpen ? (
+                      <form
+                        onSubmit={(event) => void handleRename(event)}
+                        className="flex flex-wrap items-center gap-2"
+                      >
+                        <input
+                          value={renameDraft}
+                          onChange={(event) => {
+                            setRenameDraft(event.target.value);
+                            setRenameError(null);
+                          }}
+                          maxLength={80}
+                          aria-label="Shortlist name"
+                          className="w-56 rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none"
+                        />
+                        <button
+                          type="submit"
+                          disabled={
+                            savingRename ||
+                            !renameDraft.trim() ||
+                            renameDraft.trim() === loadedDetail.name
+                          }
+                          className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
+                        >
+                          {savingRename ? "Saving…" : "Save name"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRenameOpen(false);
+                            setRenameDraft(loadedDetail.name);
+                            setRenameError(null);
+                          }}
+                          className="text-xs font-medium text-slate-600 hover:underline"
+                        >
+                          Cancel
+                        </button>
+                      </form>
+                    ) : (
+                      <h2 className="text-lg font-semibold text-slate-900">{loadedDetail.name}</h2>
+                    )}
+                    {renameError && <p className="mt-1 text-sm text-rose-700">{renameError}</p>}
                     <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
                       <Lock className="h-3.5 w-3.5" aria-hidden />
                       Private to you · {loadedDetail.entries.length}{" "}
                       {loadedDetail.entries.length === 1 ? "candidate" : "candidates"}
                     </p>
                   </div>
+                  <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRenameOpen(true);
+                      setRenameDraft(loadedDetail.name);
+                      setRenameError(null);
+                    }}
+                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    Rename
+                  </button>
                   <button
                     type="button"
                     onClick={() => void handleDeleteList()}
@@ -266,6 +348,7 @@ export default function RecruiterShortlists() {
                     <Trash2 className="h-3.5 w-3.5" aria-hidden />
                     {deletingList ? "Deleting…" : "Delete list"}
                   </button>
+                  </div>
                 </div>
 
                 {noteError && <p className="mt-2 text-sm text-rose-700">{noteError}</p>}

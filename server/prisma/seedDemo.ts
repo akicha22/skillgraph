@@ -125,7 +125,8 @@ export async function seedDemoPosts(): Promise<{ created: number }> {
       select: { id: true },
     });
     if (existing) continue;
-    await prisma.recruiterPost.create({ data: { recruiterId: recruiter.id, ...post } });
+    // Demo posts are seeded online; a recruiter can close one from the dashboard afterwards.
+    await prisma.recruiterPost.create({ data: { recruiterId: recruiter.id, ...post, status: "OPEN" } });
     created += 1;
   }
   return { created };

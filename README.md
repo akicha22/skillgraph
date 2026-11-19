@@ -98,7 +98,7 @@ not the caller's.
 | `/api/recruiter/assessments` | Generate, edit, publish, version, list submissions |
 | `/api/recruiter/attempts` | One submitted attempt, save marks, compare two to four, saved comparison weights |
 | `/api/recruiter/shortlists` | Own shortlists, entries and private notes |
-| `/api/recruiter/posts` | Publish, list and remove own requirements posts |
+| `/api/recruiter/posts` | Publish, list, close/reopen and remove own requirements posts |
 
 ## Checks
 
@@ -156,5 +156,5 @@ afterwards. `dev.db` is never opened.
 - The permission suite covers the paths it names above; other routes are not exercised end to end yet.
 - There is no practice-evidence model in this build: a candidate's skills are the chosen rows in
   `CandidateSkill`, and no private practice results exist to keep from recruiters yet.
-- Shortlists cannot be renamed or reordered.
+- Shortlists can be renamed but not reordered; the list sorts by most recent activity.
 - SQLite is the only configured database.

@@ -174,6 +174,45 @@ recruiterShortlistsRouter.get(
   }),
 );
 
+// Rename: the owning recruiter only, and names stay unique per recruiter.
+recruiterShortlistsRouter.patch(
+  "/:shortlistId",
+  asyncHandler(async (req, res) => {
+    const parsed = nameSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid shortlist", details: formatZodIssues(parsed.error) });
+      return;
+    }
+
+    const ownerId = currentUser(res).id;
+    const shortlistId = routeParam(req.params.shortlistId);
+    const owned = await prisma.shortlist.findFirst({
+      where: { id: shortlistId, ownerId },
+      select: { id: true },
+    });
+    if (!owned) {
+      res.status(404).json({ error: "Shortlist not found" });
+      return;
+    }
+
+    const clash = await prisma.shortlist.findFirst({
+      where: { ownerId, name: parsed.data.name, NOT: { id: shortlistId } },
+      select: { id: true },
+    });
+    if (clash) {
+      res.status(409).json({ error: "You already have a shortlist with that name" });
+      return;
+    }
+
+    await prisma.shortlist.update({
+      where: { id: shortlistId },
+      data: { name: parsed.data.name },
+    });
+    const updated = await shortlistQuery(shortlistId, ownerId);
+    res.json(serializeShortlist(updated!));
+  }),
+);
+
 const entrySchema = z.object({
   attemptId: z.string().min(1, "Choose a submission"),
   note: z.string().max(2000, "Keep the note under 2000 characters").optional(),

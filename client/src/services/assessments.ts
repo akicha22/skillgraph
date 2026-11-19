@@ -135,6 +135,11 @@ export function removeShortlistEntry(shortlistId: string, entryId: string) {
   return api.del<void>(`/recruiter/shortlists/${shortlistId}/entries/${entryId}`);
 }
 
+/** Renames one of the recruiter's own shortlists; names stay unique per recruiter. */
+export function renameShortlist(shortlistId: string, name: string) {
+  return api.patch<ShortlistDetail>(`/recruiter/shortlists/${shortlistId}`, { name });
+}
+
 export function deleteShortlist(shortlistId: string) {
   return api.del<void>(`/recruiter/shortlists/${shortlistId}`);
 }
@@ -157,6 +162,11 @@ export function listMyPosts() {
 /** Publishes a requirements post that candidates can read. */
 export function createRecruiterPost(body: RecruiterPostInput) {
   return api.post<{ post: RecruiterPost }>("/recruiter/posts", body);
+}
+
+/** Closes or reopens a post; a closed post disappears from the candidate feed. */
+export function setRecruiterPostStatus(postId: string, status: "OPEN" | "CLOSED") {
+  return api.patch<{ post: RecruiterPost }>(`/recruiter/posts/${postId}`, { status });
 }
 
 export function deleteRecruiterPost(postId: string) {

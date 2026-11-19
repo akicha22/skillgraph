@@ -68,6 +68,8 @@ recruiterPostsRouter.post(
         companyName: parsed.data.companyName,
         location: parsed.data.location?.trim() ? parsed.data.location.trim() : null,
         requirements: parsed.data.requirements,
+        // Published posts start online; only the recruiter's own status change takes one down.
+        status: "OPEN",
       },
       select: {
         id: true,
@@ -80,6 +82,48 @@ recruiterPostsRouter.post(
       },
     });
     res.status(201).json({ post });
+  }),
+);
+
+const statusSchema = z.object({
+  status: z.enum(["OPEN", "CLOSED"], { message: "Status must be OPEN or CLOSED" }),
+});
+
+// Close or reopen a post. A closed post disappears from the candidate feed without being deleted,
+// so its history and any links to it stay intact.
+recruiterPostsRouter.patch(
+  "/:postId",
+  asyncHandler(async (req, res) => {
+    const parsed = statusSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid post status", details: formatZodIssues(parsed.error) });
+      return;
+    }
+
+    const ownerId = currentUser(res).id;
+    const postId = routeParam(req.params.postId);
+    const updated = await prisma.recruiterPost.updateMany({
+      where: { id: postId, recruiterId: ownerId },
+      data: { status: parsed.data.status },
+    });
+    if (updated.count === 0) {
+      res.status(404).json({ error: "Post not found" });
+      return;
+    }
+
+    const post = await prisma.recruiterPost.findFirst({
+      where: { id: postId, recruiterId: ownerId },
+      select: {
+        id: true,
+        title: true,
+        companyName: true,
+        location: true,
+        requirements: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+    res.json({ post });
   }),
 );
 
