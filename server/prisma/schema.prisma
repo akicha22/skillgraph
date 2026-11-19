@@ -21,6 +21,7 @@ model User {
   attempts    AssessmentAttempt[]
   auditLogs   AuditLog[]
   shortlists  Shortlist[]
+  posts       RecruiterPost[]
 }
 model SkillDomain {
   id          String   @id @default(cuid())
@@ -114,10 +115,21 @@ model AssessmentVersion {
   skills                AssessmentVersionSkill[]
   tasks                 AssessmentTask[]
   attempts              AssessmentAttempt[]
+  comparisonWeights     ComparisonWeights?
   createdAt             DateTime                 @default(now())
   updatedAt             DateTime                 @updatedAt
 
   @@unique([assessmentId, versionNumber])
+}
+
+// A recruiter's saved skill weights for comparing submissions of one version. Kept separate from
+// AssessmentVersionSkill so a saved comparison preference never changes the assessment itself.
+model ComparisonWeights {
+  versionId String            @id
+  version   AssessmentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  weights   String // JSON array of { skillId, weight }
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
 }
 
 model AssessmentVersionSkill {
@@ -214,6 +226,23 @@ model AssessmentCriterionScore {
 
   @@unique([attemptId, criterionId])
   @@index([criterionId])
+}
+
+// A recruiter's open role, shown to candidates as a requirements post.
+model RecruiterPost {
+  id           String   @id @default(cuid())
+  recruiterId  String
+  recruiter    User     @relation(fields: [recruiterId], references: [id], onDelete: Cascade)
+  title        String
+  companyName  String
+  location     String?
+  requirements String
+  status       String   @default("OPEN") // OPEN | CLOSED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([recruiterId])
+  @@index([status])
 }
 
 // A recruiter's private list of submitted candidates. Notes are only ever read by its owner;

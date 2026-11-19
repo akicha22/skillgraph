@@ -31,6 +31,8 @@ const fixture = {
   candidateACookie: "",
   attemptA: "",
   attemptB: "",
+  versionA: "",
+  versionB: "",
   assessmentB: "",
   shortlistB: "",
 };
@@ -53,6 +55,15 @@ async function get(path: string, cookie?: string) {
   const res = await fetch(`${baseUrl}${path}`, { headers: cookie ? { cookie } : undefined });
   const body: unknown = await res.json().catch(() => null);
   return { status: res.status, body };
+}
+
+async function put(path: string, cookie: string, body: unknown) {
+  const res = await fetch(`${baseUrl}${path}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json", cookie },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, body: await res.json().catch(() => null) };
 }
 
 function errorOf(body: unknown): string {
@@ -206,6 +217,8 @@ before(async () => {
 
   fixture.attemptA = attemptA.id;
   fixture.attemptB = attemptB.id;
+  fixture.versionA = assessmentA.versionId;
+  fixture.versionB = assessmentB.versionId;
   fixture.assessmentB = assessmentB.assessmentId;
   fixture.shortlistB = shortlistB.id;
 
@@ -303,6 +316,59 @@ describe("another recruiter's work", () => {
         .status,
       404,
     );
+  });
+});
+
+describe("saved comparison weights", () => {
+  it("saves and returns the owner's weighting", async () => {
+    const skills = await prisma.assessmentVersionSkill.findMany({
+      where: { versionId: fixture.versionA },
+      select: { skillId: true },
+    });
+    const saved = await put(
+      "/api/recruiter/attempts/compare/weights",
+      fixture.recruiterACookie,
+      {
+        versionId: fixture.versionA,
+        weights: skills.map((skill) => ({ skillId: skill.skillId, weight: 50 })),
+      },
+    );
+    assert.equal(saved.status, 200);
+
+    const read = await get(
+      `/api/recruiter/attempts/compare/weights?versionId=${fixture.versionA}`,
+      fixture.recruiterACookie,
+    );
+    assert.equal(read.status, 200);
+    const body = read.body as { weights: { skillId: string; weight: number }[] | null };
+    assert.equal(body.weights?.length, skills.length);
+    assert.equal(body.weights?.[0].weight, 50);
+  });
+
+  it("rejects a skill that is not in the version", async () => {
+    const res = await put(
+      "/api/recruiter/attempts/compare/weights",
+      fixture.recruiterACookie,
+      { versionId: fixture.versionA, weights: [{ skillId: "not-a-skill", weight: 10 }] },
+    );
+    assert.equal(res.status, 400);
+  });
+
+  it("stops a candidate from saving weights", async () => {
+    const res = await put(
+      "/api/recruiter/attempts/compare/weights",
+      fixture.candidateACookie,
+      { versionId: fixture.versionA, weights: [] },
+    );
+    assert.equal(res.status, 403);
+  });
+
+  it("hides another recruiter's weighting behind 404", async () => {
+    const res = await get(
+      `/api/recruiter/attempts/compare/weights?versionId=${fixture.versionB}`,
+      fixture.recruiterACookie,
+    );
+    assert.equal(res.status, 404);
   });
 });
 

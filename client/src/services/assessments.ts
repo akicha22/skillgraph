@@ -5,6 +5,8 @@ import type {
   CriterionScoreInput,
   CandidateAssessmentList,
   ComparisonDetail,
+  CandidatePost,
+  ComparisonWeights,
   CandidateAttempt,
   CandidateAttemptLookup,
   CandidateResponse,
@@ -13,6 +15,8 @@ import type {
   GenerateRequest,
   GenerateResponse,
   ParsedRequirements,
+  RecruiterPost,
+  RecruiterPostInput,
   ShortlistDetail,
   ShortlistSummary,
   SubmissionDetail,
@@ -77,6 +81,21 @@ export function compareSubmissions(attemptIds: string[]) {
   );
 }
 
+/** The comparison weights saved for a version, or null when none were saved. */
+export function getComparisonWeights(versionId: string) {
+  return api.get<ComparisonWeights>(
+    `/recruiter/attempts/compare/weights?versionId=${encodeURIComponent(versionId)}`,
+  );
+}
+
+/** Saves the weighting used for comparisons of this version; an empty list clears it. */
+export function saveComparisonWeights(
+  versionId: string,
+  weights: { skillId: string; weight: number }[],
+) {
+  return api.put<ComparisonWeights>("/recruiter/attempts/compare/weights", { versionId, weights });
+}
+
 /** Saves marks per criterion and returns the submission with its new total. */
 export function saveSubmissionScores(attemptId: string, scores: CriterionScoreInput[]) {
   return api.put<SubmissionDetail>(`/recruiter/attempts/${attemptId}/scores`, { scores });
@@ -123,6 +142,25 @@ export function deleteShortlist(shortlistId: string) {
 /** The published version a candidate opens; private data is stripped on the server. */
 export function getCandidateAssessment(versionId: string) {
   return api.get<CandidateAssessmentDetail>(`/candidate/assessments/${versionId}`);
+}
+
+/** Open requirements posts from every recruiter, for the candidate dashboard. */
+export function listCandidatePosts() {
+  return api.get<{ posts: CandidatePost[] }>("/candidate/posts");
+}
+
+/** The recruiter's own requirements posts. */
+export function listMyPosts() {
+  return api.get<{ posts: RecruiterPost[] }>("/recruiter/posts");
+}
+
+/** Publishes a requirements post that candidates can read. */
+export function createRecruiterPost(body: RecruiterPostInput) {
+  return api.post<{ post: RecruiterPost }>("/recruiter/posts", body);
+}
+
+export function deleteRecruiterPost(postId: string) {
+  return api.del<void>(`/recruiter/posts/${postId}`);
 }
 
 /** Every published assessment a candidate can open. */

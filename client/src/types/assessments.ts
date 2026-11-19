@@ -365,6 +365,13 @@ export type ComparisonCandidate = {
   skills: ComparisonSkill[];
 };
 
+/** `GET /recruiter/attempts/compare/weights?versionId=` — the recruiter's saved weighting. */
+export type ComparisonWeights = {
+  /** Null when nothing has been saved for this version. */
+  weights: { skillId: string; weight: number }[] | null;
+  updatedAt: string | null;
+};
+
 /** `GET /recruiter/attempts/compare?attemptIds=` — two to four attempts of one version. */
 export type ComparisonDetail = {
   version: { id: string; title: string; versionNumber: number };
@@ -379,6 +386,45 @@ export type CandidateAssessmentSummary = {
   jobTitle: string;
   durationMinutes: number;
   taskCount: number;
+  /** The candidate's own attempt, or null when they have not started this version. */
+  attempt: {
+    id: string;
+    status: CandidateAttemptStatus;
+    submittedAt: string | null;
+    reviewedAt: string | null;
+    /** Marks saved so far; only marked criteria count. */
+    awarded: number;
+    possible: number;
+  } | null;
+};
+
+/** A requirements post as its own recruiter sees it. */
+export type RecruiterPost = {
+  id: string;
+  title: string;
+  companyName: string;
+  location: string | null;
+  requirements: string;
+  status: string;
+  createdAt: string;
+};
+
+/** `GET /candidate/posts` — every open requirements post, with who posted it. */
+export type CandidatePost = {
+  id: string;
+  title: string;
+  companyName: string;
+  location: string | null;
+  requirements: string;
+  recruiterName: string;
+  createdAt: string;
+};
+
+export type RecruiterPostInput = {
+  title: string;
+  companyName: string;
+  location?: string;
+  requirements: string;
 };
 
 /** `GET /candidate/assessments` — every published version a candidate can open. */

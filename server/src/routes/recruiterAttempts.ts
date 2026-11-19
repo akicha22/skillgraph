@@ -337,6 +337,115 @@ recruiterAttemptsRouter.get(
   }),
 );
 
+/** Saved weights as rows; a malformed column reads as "nothing saved" instead of throwing. */
+function parseWeights(value: string): { skillId: string; weight: number }[] {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((row) => {
+      if (typeof row !== "object" || row === null) return [];
+      const { skillId, weight } = row as { skillId?: unknown; weight?: unknown };
+      if (typeof skillId !== "string" || typeof weight !== "number" || !Number.isFinite(weight)) {
+        return [];
+      }
+      return [{ skillId, weight }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+// The comparison weights this recruiter saved for a version, if any.
+recruiterAttemptsRouter.get(
+  "/compare/weights",
+  asyncHandler(async (req, res) => {
+    const versionId = typeof req.query.versionId === "string" ? req.query.versionId : "";
+    if (!versionId) {
+      res.status(400).json({ error: "versionId is required" });
+      return;
+    }
+
+    const version = await prisma.assessmentVersion.findFirst({
+      where: { id: versionId, assessment: { ownerId: currentUser(res).id } },
+      select: { id: true },
+    });
+    if (!version) {
+      res.status(404).json({ error: "Assessment version not found" });
+      return;
+    }
+
+    const saved = await prisma.comparisonWeights.findUnique({
+      where: { versionId },
+      select: { weights: true, updatedAt: true },
+    });
+    res.json({
+      weights: saved ? parseWeights(saved.weights) : null,
+      updatedAt: saved?.updatedAt ?? null,
+    });
+  }),
+);
+
+const comparisonWeightsSchema = z.object({
+  versionId: z.string().min(1, "Choose an assessment version"),
+  weights: z
+    .array(
+      z.object({
+        skillId: z.string().min(1),
+        weight: z.number().int("Weights must be whole numbers").min(0).max(100),
+      }),
+    )
+    .max(50),
+});
+
+// Saves the recruiter's weighting for this version. An empty list clears it back to no saved weights.
+recruiterAttemptsRouter.put(
+  "/compare/weights",
+  asyncHandler(async (req, res) => {
+    const parsed = comparisonWeightsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid weights", details: formatZodIssues(parsed.error) });
+      return;
+    }
+
+    const version = await prisma.assessmentVersion.findFirst({
+      where: { id: parsed.data.versionId, assessment: { ownerId: currentUser(res).id } },
+      select: { id: true, skills: { select: { skillId: true } } },
+    });
+    if (!version) {
+      res.status(404).json({ error: "Assessment version not found" });
+      return;
+    }
+
+    const skillIds = new Set(version.skills.map((skill) => skill.skillId));
+    const seen = new Set<string>();
+    for (const { skillId } of parsed.data.weights) {
+      if (!skillIds.has(skillId)) {
+        res.status(400).json({ error: "A skill does not belong to this assessment version" });
+        return;
+      }
+      if (seen.has(skillId)) {
+        res.status(400).json({ error: "Each skill can only be weighted once" });
+        return;
+      }
+      seen.add(skillId);
+    }
+
+    if (parsed.data.weights.length === 0) {
+      await prisma.comparisonWeights.deleteMany({ where: { versionId: version.id } });
+      res.json({ weights: null, updatedAt: null });
+      return;
+    }
+
+    const saved = await prisma.comparisonWeights.upsert({
+      where: { versionId: version.id },
+      update: { weights: JSON.stringify(parsed.data.weights) },
+      create: { versionId: version.id, weights: JSON.stringify(parsed.data.weights) },
+      select: { updatedAt: true },
+    });
+    res.json({ weights: parsed.data.weights, updatedAt: saved.updatedAt });
+  }),
+);
+
 // Two to four submitted attempts of the same version, aggregated per skill for a side-by-side
 // comparison. Only the owning recruiter can compare, and unmarked criteria are never counted.
 recruiterAttemptsRouter.get(

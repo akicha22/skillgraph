@@ -74,8 +74,8 @@ Back on the version page, tick Arjun and Meera, then **Compare selected (2)**.
 
 - Arjun has a composite; Meera shows **Not enough marks** rather than 0%, because nothing on her
   attempt is marked yet.
-- Edit the per-skill weights to show how the composite changes; the weights are typed per visit and
-  not saved.
+- Edit the per-skill weights to show how the composite changes, then **Save weights**: the weighting
+  is stored for this version and loaded again next time you open the comparison.
 - Coverage shows how much of each skill is marked, so a low number reads as missing evidence.
 
 ### 6. Shortlists

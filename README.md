@@ -92,11 +92,13 @@ not the caller's.
 | `/api/auth` | Register, log in, log out, current user |
 | `/api/skills` | Skill library |
 | `/api/candidate/skills` | The candidate's chosen skills |
+| `/api/candidate/posts` | Open requirements posts from every recruiter |
 | `/api/candidate/assessments` | Published versions, and one as the candidate sees it |
 | `/api/candidate/attempts` | Start/resume, save an answer, submit, read the result |
 | `/api/recruiter/assessments` | Generate, edit, publish, version, list submissions |
-| `/api/recruiter/attempts` | One submitted attempt, save marks, compare two to four |
+| `/api/recruiter/attempts` | One submitted attempt, save marks, compare two to four, saved comparison weights |
 | `/api/recruiter/shortlists` | Own shortlists, entries and private notes |
+| `/api/recruiter/posts` | Publish, list and remove own requirements posts |
 
 ## Checks
 
@@ -154,5 +156,5 @@ afterwards. `dev.db` is never opened.
 - The permission suite covers the paths it names above; other routes are not exercised end to end yet.
 - There is no practice-evidence model in this build: a candidate's skills are the chosen rows in
   `CandidateSkill`, and no private practice results exist to keep from recruiters yet.
-- Comparison weights are typed per visit and not saved; shortlists cannot be renamed or reordered.
+- Shortlists cannot be renamed or reordered.
 - SQLite is the only configured database.

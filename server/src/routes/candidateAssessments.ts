@@ -16,6 +16,7 @@ function routeParam(value: string | string[] | undefined): string {
 candidateAssessmentsRouter.get(
   "/",
   asyncHandler(async (_req, res) => {
+    const candidateId = currentUser(res).id;
     const versions = await prisma.assessmentVersion.findMany({
       where: { status: "PUBLISHED" },
       orderBy: { publishedAt: "desc" },
@@ -25,18 +26,43 @@ candidateAssessmentsRouter.get(
         durationMinutes: true,
         assessment: { select: { jobTitle: true, companyName: true } },
         _count: { select: { tasks: true } },
+        tasks: { select: { marks: true } },
+        // The candidate's own attempt, so the dashboard can split open from completed work.
+        attempts: {
+          where: { candidateId },
+          select: {
+            id: true,
+            status: true,
+            submittedAt: true,
+            reviewedAt: true,
+            criterionScores: { select: { marks: true } },
+          },
+        },
       },
     });
 
     res.json({
-      assessments: versions.map((version) => ({
-        id: version.id,
-        title: version.title,
-        companyName: version.assessment.companyName,
-        jobTitle: version.assessment.jobTitle,
-        durationMinutes: version.durationMinutes,
-        taskCount: version._count.tasks,
-      })),
+      assessments: versions.map((version) => {
+        const attempt = version.attempts[0] ?? null;
+        return {
+          id: version.id,
+          title: version.title,
+          companyName: version.assessment.companyName,
+          jobTitle: version.assessment.jobTitle,
+          durationMinutes: version.durationMinutes,
+          taskCount: version._count.tasks,
+          attempt: attempt
+            ? {
+                id: attempt.id,
+                status: attempt.status,
+                submittedAt: attempt.submittedAt,
+                reviewedAt: attempt.reviewedAt,
+                awarded: attempt.criterionScores.reduce((sum, score) => sum + score.marks, 0),
+                possible: version.tasks.reduce((sum, task) => sum + task.marks, 0),
+              }
+            : null,
+        };
+      }),
     });
   }),
 );

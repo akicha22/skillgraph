@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Scale } from "lucide-react";
 import DashboardLayout from "../layouts/DashboardLayout";
-import { compareSubmissions } from "../services/assessments";
+import {
+  compareSubmissions,
+  getComparisonWeights,
+  saveComparisonWeights,
+} from "../services/assessments";
 import { ApiError } from "../services/api";
 import type { ComparisonCandidate, ComparisonDetail } from "../types/assessments";
 
@@ -11,6 +15,18 @@ const DEFAULT_WEIGHT = 10;
 /** Default weights sit flat, so a recruiter has to make a deliberate choice to bias the result. */
 function defaultWeights(skills: ComparisonDetail["skills"]) {
   return Object.fromEntries(skills.map((skill) => [skill.skillId, DEFAULT_WEIGHT]));
+}
+
+/** Saved weights for the skills this version still has; anything else keeps the default. */
+function mergeSavedWeights(
+  skills: ComparisonDetail["skills"],
+  saved: { skillId: string; weight: number }[],
+) {
+  const next = defaultWeights(skills);
+  for (const row of saved) {
+    if (row.skillId in next) next[row.skillId] = row.weight;
+  }
+  return next;
 }
 
 /**
@@ -46,15 +62,27 @@ export default function RecruiterCompare() {
   const [weights, setWeights] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(attemptIds.length >= 2);
+  const [savingWeights, setSavingWeights] = useState(false);
+  const [weightError, setWeightError] = useState<string | null>(null);
+  const [weightSaved, setWeightSaved] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     if (attemptIds.length < 2) return;
     compareSubmissions(attemptIds)
-      .then((loaded) => {
+      .then(async (loaded) => {
         if (cancelled) return;
         setComparison(loaded);
         setWeights(defaultWeights(loaded.skills));
+        try {
+          const saved = await getComparisonWeights(loaded.version.id);
+          if (cancelled || !saved.weights || saved.weights.length === 0) return;
+          setWeights(mergeSavedWeights(loaded.skills, saved.weights));
+          setSavedAt(saved.updatedAt);
+        } catch {
+          /* Saved weights are optional: the default 10 per skill still works. */
+        }
       })
       .catch((err) => {
         if (cancelled) return;
@@ -108,6 +136,26 @@ export default function RecruiterCompare() {
     );
   }
 
+  async function saveWeights() {
+    if (!comparison) return;
+    setSavingWeights(true);
+    setWeightError(null);
+    setWeightSaved(null);
+    try {
+      const payload = comparison.skills.map((skill) => ({
+        skillId: skill.skillId,
+        weight: Math.round(weights[skill.skillId] ?? DEFAULT_WEIGHT),
+      }));
+      const saved = await saveComparisonWeights(comparison.version.id, payload);
+      setSavedAt(saved.updatedAt);
+      setWeightSaved("Weights saved for this version.");
+    } catch (err) {
+      setWeightError(err instanceof Error ? err.message : "Could not save these weights.");
+    } finally {
+      setSavingWeights(false);
+    }
+  }
+
   const { skills, candidates } = comparison;
 
   return (
@@ -134,15 +182,39 @@ export default function RecruiterCompare() {
       <section className="rounded-2xl border border-slate-200 bg-white p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold text-slate-900">Side by side</h2>
-          <button
-            type="button"
-            onClick={() => setWeights(defaultWeights(skills))}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            <Scale className="h-3.5 w-3.5" aria-hidden />
-            Reset weights
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void saveWeights()}
+              disabled={savingWeights}
+              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {savingWeights ? "Saving…" : "Save weights"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setWeights(defaultWeights(skills));
+                setSavedAt(null);
+                setWeightError(null);
+                setWeightSaved(null);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <Scale className="h-3.5 w-3.5" aria-hidden />
+              Reset weights
+            </button>
+          </div>
         </div>
+        <p className="mt-2 text-xs text-slate-500">
+          {savedAt
+            ? `Your saved weighting was applied (last saved ${new Date(savedAt).toLocaleString()}).`
+            : "Weighted with the default 10 per skill. Save to keep your weighting for this version."}
+        </p>
+        {weightError && <p className="mt-1 text-xs text-rose-700">{weightError}</p>}
+        {weightSaved && !weightError && (
+          <p className="mt-1 text-xs text-emerald-700">{weightSaved}</p>
+        )}
 
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[40rem] text-left text-sm">
