@@ -13,6 +13,8 @@ import type {
   GenerateRequest,
   GenerateResponse,
   ParsedRequirements,
+  ShortlistDetail,
+  ShortlistSummary,
   SubmissionDetail,
   SubmissionList,
   VersionList,
@@ -78,6 +80,44 @@ export function compareSubmissions(attemptIds: string[]) {
 /** Saves marks per criterion and returns the submission with its new total. */
 export function saveSubmissionScores(attemptId: string, scores: CriterionScoreInput[]) {
   return api.put<SubmissionDetail>(`/recruiter/attempts/${attemptId}/scores`, { scores });
+}
+
+/** The recruiter's shortlists; passing an attemptId marks the lists that already hold it. */
+export function listShortlists(attemptId?: string) {
+  const query = attemptId ? `?attemptId=${encodeURIComponent(attemptId)}` : "";
+  return api.get<{ shortlists: ShortlistSummary[] }>(`/recruiter/shortlists${query}`);
+}
+
+/** One shortlist with its shortlisted candidates and private notes. */
+export function getShortlist(shortlistId: string) {
+  return api.get<ShortlistDetail>(`/recruiter/shortlists/${shortlistId}`);
+}
+
+export function createShortlist(name: string) {
+  return api.post<{ shortlist: ShortlistSummary }>("/recruiter/shortlists", { name });
+}
+
+/** Adds a submitted attempt of the recruiter's own assessment, with an optional note. */
+export function addShortlistEntry(shortlistId: string, attemptId: string, note: string) {
+  return api.post<ShortlistDetail>(`/recruiter/shortlists/${shortlistId}/entries`, {
+    attemptId,
+    note,
+  });
+}
+
+/** Replaces the private note on one entry and returns the whole list. */
+export function saveShortlistNote(shortlistId: string, entryId: string, note: string) {
+  return api.patch<ShortlistDetail>(`/recruiter/shortlists/${shortlistId}/entries/${entryId}`, {
+    note,
+  });
+}
+
+export function removeShortlistEntry(shortlistId: string, entryId: string) {
+  return api.del<void>(`/recruiter/shortlists/${shortlistId}/entries/${entryId}`);
+}
+
+export function deleteShortlist(shortlistId: string) {
+  return api.del<void>(`/recruiter/shortlists/${shortlistId}`);
 }
 
 /** The published version a candidate opens; private data is stripped on the server. */

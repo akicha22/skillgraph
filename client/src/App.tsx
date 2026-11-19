@@ -12,6 +12,7 @@ import AssessmentDraft from "./pages/AssessmentDraft";
 import CandidateAssessmentPage from "./pages/CandidateAssessment";
 import RecruiterSubmission from "./pages/RecruiterSubmission";
 import RecruiterCompare from "./pages/RecruiterCompare";
+import RecruiterShortlists from "./pages/RecruiterShortlists";
 
 export default function App() {
   return (
@@ -83,6 +84,14 @@ export default function App() {
             element={
               <ProtectedRoute role="RECRUITER">
                 <RecruiterCompare />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recruiter/shortlists"
+            element={
+              <ProtectedRoute role="RECRUITER">
+                <RecruiterShortlists />
               </ProtectedRoute>
             }
           />

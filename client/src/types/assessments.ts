@@ -427,6 +427,45 @@ export type CandidateAttempt = {
   result: CandidateResult | null;
 };
 
+/** `GET /recruiter/shortlists` — the recruiter's own lists, never another recruiter's. */
+export type ShortlistSummary = {
+  id: string;
+  name: string;
+  entryCount: number;
+  /** True when the attempt the list was requested for is already on this list. */
+  containsAttempt: boolean;
+  updatedAt: string;
+};
+
+/** One shortlisted candidate: the attempt's score and the recruiter's private note. */
+export type ShortlistEntry = {
+  id: string;
+  attemptId: string;
+  note: string;
+  createdAt: string;
+  candidate: { name: string; email: string };
+  assessment: {
+    versionId: string;
+    title: string;
+    versionNumber: number;
+    jobTitle: string;
+    companyName: string;
+  };
+  submittedAt: string | null;
+  reviewedAt: string | null;
+  awarded: number;
+  possible: number;
+  scoredCriteria: number;
+  criterionCount: number;
+};
+
+/** `GET /recruiter/shortlists/:shortlistId` — one list with its entries. */
+export type ShortlistDetail = {
+  id: string;
+  name: string;
+  entries: ShortlistEntry[];
+};
+
 /** `GET /candidate/attempts?versionId=` — the candidate's attempt on a version, if any. */
 export type CandidateAttemptLookup = { attempt: CandidateAttempt | null };
 

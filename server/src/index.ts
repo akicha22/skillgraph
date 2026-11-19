@@ -13,6 +13,7 @@ import { recruiterAssessmentsRouter } from "./routes/recruiterAssessments";
 import { candidateAssessmentsRouter } from "./routes/candidateAssessments";
 import { candidateAttemptsRouter } from "./routes/candidateAttempts";
 import { recruiterAttemptsRouter } from "./routes/recruiterAttempts";
+import { recruiterShortlistsRouter } from "./routes/recruiterShortlists";
 
 const app = express();
 app.use(cors({ origin: "http://localhost:5173", credentials: true }));
@@ -39,6 +40,7 @@ app.use("/api/candidate/attempts", candidateAttemptsRouter);
 app.use("/api/candidate", candidateGuardRouter);
 app.use("/api/recruiter/assessments", recruiterAssessmentsRouter);
 app.use("/api/recruiter/attempts", recruiterAttemptsRouter);
+app.use("/api/recruiter/shortlists", recruiterShortlistsRouter);
 app.use("/api/recruiter", recruiterGuardRouter);
 
 app.use("/api", (_req, res) => {

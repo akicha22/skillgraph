@@ -1,16 +1,22 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Clock } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Clock, ListPlus } from "lucide-react";
 import DashboardLayout from "../layouts/DashboardLayout";
 // Charts are only needed on this page, so they load as their own chunk.
 const SkillChart = lazy(() => import("../components/SkillChart"));
-import { getSubmission, saveSubmissionScores } from "../services/assessments";
+import {
+  addShortlistEntry,
+  getSubmission,
+  listShortlists,
+  saveSubmissionScores,
+} from "../services/assessments";
 import { ApiError } from "../services/api";
 import { humanize } from "../utils/labels";
 import {
   DIFFICULTY_LABELS,
   METHOD_LABELS,
   TASK_TYPE_LABELS,
+  type ShortlistSummary,
   type SubmissionDetail,
 } from "../types/assessments";
 
@@ -32,6 +38,12 @@ export default function RecruiterSubmission() {
   const [savingScores, setSavingScores] = useState(false);
   const [scoreError, setScoreError] = useState<string | null>(null);
   const [scoresSaved, setScoresSaved] = useState(false);
+  const [shortlists, setShortlists] = useState<ShortlistSummary[] | null>(null);
+  const [shortlistChoice, setShortlistChoice] = useState("");
+  const [shortlistNote, setShortlistNote] = useState("");
+  const [addingToList, setAddingToList] = useState(false);
+  const [shortlistError, setShortlistError] = useState<string | null>(null);
+  const [shortlistSaved, setShortlistSaved] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,6 +63,23 @@ export default function RecruiterSubmission() {
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [attemptId]);
+
+  // Shortlists are a side action here: a failure must not hide the submission itself.
+  useEffect(() => {
+    let cancelled = false;
+    listShortlists(attemptId)
+      .then((data) => {
+        if (cancelled) return;
+        setShortlists(data.shortlists);
+        setShortlistChoice(data.shortlists.find((list) => !list.containsAttempt)?.id ?? "");
+      })
+      .catch(() => {
+        /* The submission page still works without the shortlist panel. */
       });
     return () => {
       cancelled = true;
@@ -143,6 +172,26 @@ export default function RecruiterSubmission() {
     }
   }
 
+  async function addToShortlist() {
+    if (!shortlistChoice) return;
+    setAddingToList(true);
+    setShortlistError(null);
+    setShortlistSaved(null);
+    const chosen = shortlists?.find((list) => list.id === shortlistChoice);
+    try {
+      await addShortlistEntry(shortlistChoice, attemptId, shortlistNote);
+      setShortlistNote("");
+      setShortlistSaved(chosen?.name ?? "the shortlist");
+      const refreshed = await listShortlists(attemptId);
+      setShortlists(refreshed.shortlists);
+      setShortlistChoice(refreshed.shortlists.find((list) => !list.containsAttempt)?.id ?? "");
+    } catch (err) {
+      setShortlistError(err instanceof Error ? err.message : "Could not add this candidate.");
+    } finally {
+      setAddingToList(false);
+    }
+  }
+
   return (
     <DashboardLayout>
       <section className="rounded-2xl border border-slate-200 bg-white p-6">
@@ -195,6 +244,92 @@ export default function RecruiterSubmission() {
           <ArrowLeft className="h-4 w-4" aria-hidden />
           Back to this version
         </Link>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+              <ListPlus className="h-4 w-4 text-indigo-600" aria-hidden />
+              Shortlist
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm text-slate-600">
+              Keep this candidate for a later round. The note is private to you; it is not part of
+              the candidate&apos;s assessment and they never see it.
+            </p>
+          </div>
+          <Link
+            to="/recruiter/shortlists"
+            className="text-sm font-medium text-indigo-600 hover:underline"
+          >
+            Manage shortlists
+          </Link>
+        </div>
+
+        {shortlists === null ? (
+          <p className="mt-3 text-sm text-slate-600">Loading your shortlists…</p>
+        ) : shortlists.length === 0 ? (
+          <p className="mt-3 text-sm text-slate-600">
+            You have no shortlists yet.{" "}
+            <Link to="/recruiter/shortlists" className="font-medium text-indigo-600 hover:underline">
+              Create one
+            </Link>{" "}
+            to keep this candidate.
+          </p>
+        ) : (
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <label>
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Shortlist
+              </span>
+              <select
+                value={shortlistChoice}
+                onChange={(event) => {
+                  setShortlistChoice(event.target.value);
+                  setShortlistError(null);
+                  setShortlistSaved(null);
+                }}
+                className="mt-1 block rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none"
+              >
+                <option value="">Choose a shortlist</option>
+                {shortlists.map((list) => (
+                  <option key={list.id} value={list.id} disabled={list.containsAttempt}>
+                    {list.name}
+                    {list.containsAttempt ? " — already added" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="min-w-56 flex-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Private note (optional)
+              </span>
+              <input
+                value={shortlistNote}
+                onChange={(event) => {
+                  setShortlistNote(event.target.value);
+                  setShortlistError(null);
+                  setShortlistSaved(null);
+                }}
+                maxLength={2000}
+                placeholder="e.g. Strong SQL — revisit after the second interview"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => void addToShortlist()}
+              disabled={!shortlistChoice || addingToList}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {addingToList ? "Adding…" : "Add to shortlist"}
+            </button>
+          </div>
+        )}
+        {shortlistError && <p className="mt-2 text-sm text-rose-700">{shortlistError}</p>}
+        {shortlistSaved && (
+          <p className="mt-2 text-sm text-emerald-700">Added to {shortlistSaved}.</p>
+        )}
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6">

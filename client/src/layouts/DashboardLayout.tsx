@@ -8,7 +8,10 @@ const navByRole: Record<Role, { to: string; label: string; end?: boolean }[]> = 
     { to: "/candidate", label: "Overview", end: true },
     { to: "/candidate/skills", label: "My skills" },
   ],
-  RECRUITER: [{ to: "/recruiter", label: "Overview", end: true }],
+  RECRUITER: [
+    { to: "/recruiter", label: "Overview", end: true },
+    { to: "/recruiter/shortlists", label: "Shortlists" },
+  ],
 };
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {

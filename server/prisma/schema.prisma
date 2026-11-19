@@ -20,6 +20,7 @@ model User {
   assessments Assessment[]
   attempts    AssessmentAttempt[]
   auditLogs   AuditLog[]
+  shortlists  Shortlist[]
 }
 model SkillDomain {
   id          String   @id @default(cuid())
@@ -168,6 +169,7 @@ model AssessmentAttempt {
   candidate   User                 @relation(fields: [candidateId], references: [id], onDelete: Cascade)
   responses   AssessmentResponse[]
   criterionScores AssessmentCriterionScore[]
+  shortlistEntries ShortlistEntry[]
 
   // One attempt per candidate per version keeps answers from splitting across duplicates.
   @@unique([versionId, candidateId])
@@ -212,6 +214,35 @@ model AssessmentCriterionScore {
 
   @@unique([attemptId, criterionId])
   @@index([criterionId])
+}
+
+// A recruiter's private list of submitted candidates. Notes are only ever read by its owner;
+// no candidate route reads this table.
+model Shortlist {
+  id        String           @id @default(cuid())
+  ownerId   String
+  owner     User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name      String
+  entries   ShortlistEntry[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([ownerId, name])
+  @@index([ownerId])
+}
+
+model ShortlistEntry {
+  id          String            @id @default(cuid())
+  shortlistId String
+  shortlist   Shortlist         @relation(fields: [shortlistId], references: [id], onDelete: Cascade)
+  attemptId   String
+  attempt     AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  note        String            @default("") // recruiter-only
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@unique([shortlistId, attemptId])
+  @@index([attemptId])
 }
 
 model AuditLog {
