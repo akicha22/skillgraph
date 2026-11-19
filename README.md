@@ -77,7 +77,6 @@ flagged `isDemo` and the UI shows it.
 | A candidate's rubric view carries names, limits and awarded marks only | `server/src/routes/candidateAttempts.ts` selects `id, position, name, maxMarks` |
 | A recruiter reads only their own assessments, attempts and shortlists | every query filters on `assessment.ownerId` / `shortlist.ownerId`; other owners get 404, not 403, so ids do not confirm existence |
 | Shortlist notes belong to one recruiter | `Shortlist`/`ShortlistEntry` are owner-scoped; no candidate route reads those tables |
-| Practice evidence never reaches a recruiter | stored and queried separately, and not joined into any recruiter query |
 | Roles cannot be forged | `requireAuth` reloads the user (and role) from the database on each request; `requireRole` then gates the router |
 
 Expected responses: `401` when signed out, `403` when the role is wrong, `404` when the resource is
@@ -108,7 +107,7 @@ npm run lint -w client              # client lint
 
 ### Tests
 
-Tests use `node:test` through `tsx` and need no database, no network and no API key.
+Tests use `node:test` through `tsx`. The unit tests need no database, no network and no API key.
 
 ```bash
 cd server
@@ -125,10 +124,32 @@ The privacy and auth tests cover: the candidate view's allowlist (before and aft
 public user projection (no password hash), role whitelisting at registration, email normalisation,
 password rules, and the error shape the API returns.
 
+### End-to-end permission tests
+
+```bash
+cd server
+npx tsx --test src/tests/permissions.test.ts
+```
+
+These start the real Express app (`src/app.ts`) on an ephemeral port. Before the first test they run
+`prisma migrate deploy` against a throwaway SQLite file in the OS temp directory, build two
+recruiters with one published assessment each plus two submitted attempts, and delete the file
+afterwards. `dev.db` is never opened.
+
+| Case | Expected |
+|---|---|
+| No cookie, or a forged session cookie | `401` |
+| Candidate calling `/api/recruiter/attempts` or `/api/recruiter/shortlists` | `403` |
+| Recruiter calling `/api/candidate/assessments` | `403` |
+| Recruiter asking for another recruiter's submission, versions or shortlist | `404` |
+| Owner reading their own submission | `200` |
+| Candidate reading their own attempt | `200`, with no `answerKey`, `privateGuidance`, `privateData` or expected value |
+| Candidate asking for another candidate's attempt | `404` |
+
 ## Known limitations
 
-- Tests are unit-level. Ownership and role behaviour end to end is checked by hand against a running
-  API (sign in as a candidate, call a `/api/recruiter/...` path and expect `403`; sign out and expect
-  `401`; ask for another recruiter's attempt and expect `404`).
+- The permission suite covers the paths it names above; other routes are not exercised end to end yet.
+- There is no practice-evidence model in this build: a candidate's skills are the chosen rows in
+  `CandidateSkill`, and no private practice results exist to keep from recruiters yet.
 - Comparison weights are typed per visit and not saved; shortlists cannot be renamed or reordered.
 - SQLite is the only configured database.
