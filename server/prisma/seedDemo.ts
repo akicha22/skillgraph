@@ -1,3 +1,7 @@
+import { publishIssues } from "../src/assessments/draft";
+import { gradeDailyAnswer } from "../src/tasks/dailyQuestions";
+import { buildDailyTasks, dayKey, shiftDayKey } from "../src/tasks/practice";
+import { awardPoints } from "../src/tasks/scoring";
 import { prisma } from "../src/db";
 import { generateAssessmentDraft } from "../src/ai";
 
@@ -9,8 +13,7 @@ import { generateAssessmentDraft } from "../src/ai";
  * are the same structures the app produces when AI is off. The seeded criterion marks are sample
  * marks a recruiter would give, not computed results — nothing in the app generates them.
  *
- * Idempotent: the demo assessment is found by owner, job title and company, and the second run
- * skips everything instead of duplicating it.
+ * Idempotent: the existing demo assessment, attempts and shortlist entries are reused.
  */
 
 const RECRUITER_EMAIL = "recruiter@skillgraph.test";
@@ -118,8 +121,8 @@ function answerFor(privateData: Record<string, unknown>, strong: boolean): strin
 
 /** Creates the demo posts once; a post with the same title and owner is left alone. */
 export async function seedDemoPosts(): Promise<{ created: number }> {
-  const recruiter = await prisma.user.findUnique({
-    where: { email: RECRUITER_EMAIL },
+  const recruiter = await prisma.user.findFirst({
+    where: { email: RECRUITER_EMAIL, isDemo: true, role: "RECRUITER" },
     select: { id: true },
   });
   if (!recruiter) throw new Error(`Demo recruiter ${RECRUITER_EMAIL} is missing; run the seed again.`);
@@ -157,29 +160,37 @@ export async function seedDemoPosts(): Promise<{ created: number }> {
   return { created };
 }
 
-export async function seedDemoAssessment(): Promise<DemoSeedSummary> {
-  const recruiter = await prisma.user.findUnique({
-    where: { email: RECRUITER_EMAIL },
-    select: { id: true },
-  });
-  if (!recruiter) throw new Error(`Demo recruiter ${RECRUITER_EMAIL} is missing; run the seed again.`);
-
-  const candidates = await prisma.user.findMany({
-    where: { email: { in: [MARKED_CANDIDATE_EMAIL, PENDING_CANDIDATE_EMAIL] } },
-    select: { id: true, email: true },
-  });
-  const markedCandidate = candidates.find((user) => user.email === MARKED_CANDIDATE_EMAIL);
-  const pendingCandidate = candidates.find((user) => user.email === PENDING_CANDIDATE_EMAIL);
-  if (!markedCandidate || !pendingCandidate) {
-    throw new Error("The demo candidates are missing; run the seed again.");
-  }
-
+async function ensureDemoVersion(recruiterId: string, now: Date) {
   const existing = await prisma.assessment.findFirst({
-    where: { ownerId: recruiter.id, jobTitle: JOB_TITLE, companyName: COMPANY },
+    where: { ownerId: recruiterId, jobTitle: JOB_TITLE, companyName: COMPANY },
     select: { id: true },
   });
   if (existing) {
-    return { created: false, assessmentId: existing.id };
+    const version = await prisma.assessmentVersion.findFirst({
+      where: { assessmentId: existing.id, status: { in: ["DRAFT", "PUBLISHED"] } },
+      orderBy: [{ status: "desc" }, { versionNumber: "desc" }],
+      include: {
+        assessment: true,
+        skills: { include: { skill: { include: { subskills: true } } } },
+        tasks: { orderBy: { position: "asc" }, include: { skill: true, rubric: true } },
+      },
+    });
+    if (!version) return null;
+    if (version.status === "DRAFT") {
+      const issues = publishIssues(version);
+      if (issues.length > 0) {
+        console.warn("Demo draft was not published:", issues.map((issue) => issue.message).join(" "));
+        return null;
+      }
+      await prisma.assessmentVersion.updateMany({
+        where: { id: version.id, status: "DRAFT" },
+        data: { status: "PUBLISHED", publishedAt: now },
+      });
+    }
+    return {
+      created: false, assessment: existing, version,
+      tasks: version.tasks.map((task) => ({ ...task, privateData: JSON.parse(task.privateData) as Record<string, unknown> })),
+    };
   }
 
   const skills = await pickSkills();
@@ -220,12 +231,11 @@ export async function seedDemoAssessment(): Promise<DemoSeedSummary> {
     }
   }
 
-  const now = new Date();
   const publishedAt = new Date(now.getTime() - 1000 * 60 * 60 * 24);
 
-  const created = await prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx) => {
     const assessment = await tx.assessment.create({
-      data: { ownerId: recruiter.id, jobTitle: JOB_TITLE, companyName: COMPANY },
+      data: { ownerId: recruiterId, jobTitle: JOB_TITLE, companyName: COMPANY },
     });
 
     const version = await tx.assessmentVersion.create({
@@ -299,83 +309,114 @@ export async function seedDemoAssessment(): Promise<DemoSeedSummary> {
       });
     }
 
-    return { assessment, version, tasks };
+    return { created: true, assessment, version, tasks };
   });
 
-  const submittedAt = new Date(now.getTime() - 1000 * 60 * 60 * 6);
+}
 
-  const pendingAttempt = await prisma.assessmentAttempt.create({
-    data: {
-      versionId: created.version.id,
-      candidateId: pendingCandidate.id,
-      status: "SUBMITTED",
-      submittedAt: new Date(submittedAt.getTime() + 1000 * 60 * 30),
-      responses: {
-        create: created.tasks.map((task) => ({
-          taskId: task.id,
-          answer: answerFor(task.privateData, false),
-        })),
-      },
-    },
-    select: { id: true },
-  });
+export async function seedDemoAssessment(): Promise<DemoSeedSummary> {
+  const recruiter = await prisma.user.findFirstOrThrow({ where: { email: RECRUITER_EMAIL, isDemo: true, role: "RECRUITER" } });
+  const now = new Date();
+  const demo = await ensureDemoVersion(recruiter.id, now);
+  if (!demo) return { created: false };
 
-  const markedAttempt = await prisma.assessmentAttempt.create({
-    data: {
-      versionId: created.version.id,
-      candidateId: markedCandidate.id,
-      status: "SUBMITTED",
-      submittedAt,
-      reviewedAt: submittedAt,
-      responses: {
-        create: created.tasks.map((task) => ({
-          taskId: task.id,
-          answer: answerFor(task.privateData, true),
-        })),
-      },
-    },
-    select: { id: true },
-  });
-
-  for (const [taskIndex, task] of created.tasks.entries()) {
-    for (const criterion of task.rubric) {
-      const share = MARK_SHARES[(taskIndex + criterion.position) % MARK_SHARES.length];
-      await prisma.assessmentCriterionScore.create({
-        data: {
-          attemptId: markedAttempt.id,
-          criterionId: criterion.id,
-          marks: Math.round(criterion.maxMarks * share),
+  const specs = [
+    { email: MARKED_CANDIDATE_EMAIL, submitted: true, marked: true },
+    { email: PENDING_CANDIDATE_EMAIL, submitted: true, marked: false },
+    { email: "candidate3@skillgraph.test", submitted: false, marked: false },
+  ];
+  const [markedAttempt, pendingAttempt] = await prisma.$transaction(async (tx) => {
+    const attempts = [];
+    for (const spec of specs) {
+      const candidate = await tx.user.findFirstOrThrow({ where: { email: spec.email, isDemo: true, role: "CANDIDATE" } });
+      const submittedAt = spec.submitted ? new Date(now.getTime() - 60 * 60 * 1000) : null;
+      const savedAt = new Date(now.getTime() - 90 * 60 * 1000);
+      const tasks = spec.submitted ? demo.tasks : demo.tasks.slice(0, 1);
+      const attempt = await tx.assessmentAttempt.upsert({
+        where: { versionId_candidateId: { versionId: demo.version.id, candidateId: candidate.id } },
+        update: {},
+        create: {
+          versionId: demo.version.id, candidateId: candidate.id,
+          status: spec.submitted ? "SUBMITTED" : "IN_PROGRESS",
+          startedAt: new Date(now.getTime() - 2 * 60 * 60 * 1000),
+          submittedAt, reviewedAt: spec.marked ? submittedAt : null,
+          responses: { create: tasks.map((task) => ({ taskId: task.id, answer: answerFor(task.privateData, spec.marked), savedAt })) },
+          criterionScores: { create: spec.marked ? tasks.flatMap((task, index) => task.rubric.map((criterion) => ({
+            criterionId: criterion.id,
+            marks: Math.round(criterion.maxMarks * MARK_SHARES[(index + criterion.position) % MARK_SHARES.length]),
+          }))) : [] },
+          events: { create: tasks.flatMap((task) => [
+            { taskId: task.id, type: "TASK_OPENED", occurredAt: new Date(savedAt.getTime() - 5 * 60 * 1000) },
+            { taskId: task.id, type: "ANSWER_SAVED", occurredAt: savedAt },
+          ]) },
         },
+        select: { id: true, status: true },
       });
+      attempts.push(attempt);
     }
-  }
+    return attempts;
+  });
 
   const shortlist =
-    (await prisma.shortlist.findFirst({
-      where: { ownerId: recruiter.id, name: SHORTLIST_NAME },
-      select: { id: true },
-    })) ??
-    (await prisma.shortlist.create({
-      data: { ownerId: recruiter.id, name: SHORTLIST_NAME },
-      select: { id: true },
-    }));
-
-  const existingEntry = await prisma.shortlistEntry.findFirst({
-    where: { shortlistId: shortlist.id, attemptId: markedAttempt.id },
-    select: { id: true },
-  });
-  if (!existingEntry) {
-    await prisma.shortlistEntry.create({
-      data: { shortlistId: shortlist.id, attemptId: markedAttempt.id, note: SHORTLIST_NOTE },
+    (await prisma.shortlist.findFirst({ where: { ownerId: recruiter.id, name: SHORTLIST_NAME } })) ??
+    (await prisma.shortlist.create({ data: { ownerId: recruiter.id, name: SHORTLIST_NAME } }));
+  for (const [attempt, note] of [
+    [markedAttempt, SHORTLIST_NOTE],
+    [pendingAttempt, "Review the response before the interview and ask how the candidate checked their figures."],
+  ] as const) {
+    if (attempt.status !== "SUBMITTED") continue;
+    await prisma.shortlistEntry.upsert({
+      where: { shortlistId_attemptId: { shortlistId: shortlist.id, attemptId: attempt.id } },
+      update: {}, create: { shortlistId: shortlist.id, attemptId: attempt.id, note },
     });
   }
+  return { created: demo.created, assessmentId: demo.assessment.id, versionId: demo.version.id,
+    markedAttemptId: markedAttempt.id, pendingAttemptId: pendingAttempt.id, shortlistId: shortlist.id };
+}
 
-  return {
-    created: true,
-    assessmentId: created.assessment.id,
-    versionId: created.version.id,
-    markedAttemptId: markedAttempt.id,
-    pendingAttemptId: pendingAttempt.id,
-    shortlistId: shortlist.id,
-  };
+const PRACTICE_NOTE = "Demo practice: checked my answer against the explanation.";
+
+export async function seedDemoPractice() {
+  const samples = [
+    { email: MARKED_CANDIDATE_EMAIL, slugs: ["excel", "client-communication"], days: 3 },
+    { email: PENDING_CANDIDATE_EMAIL, slugs: ["sql", "excel"], days: 2 },
+    { email: "candidate3@skillgraph.test", slugs: ["excel", "client-communication"], days: 1 },
+  ];
+  const now = new Date();
+  const today = dayKey(now);
+  for (const sample of samples) {
+    await prisma.$transaction(async (tx) => {
+      const candidate = await tx.user.findFirstOrThrow({ where: { email: sample.email, role: "CANDIDATE", isDemo: true } });
+      const defaults = await tx.skill.findMany({ where: { slug: { in: sample.slugs } }, orderBy: { slug: "asc" } });
+      const selected = await tx.candidateSkill.findMany({ where: { userId: candidate.id }, include: { skill: true } });
+      if (selected.length === 0 && defaults.length > 0) {
+        await tx.candidateSkill.createMany({ data: defaults.map((skill) => ({ userId: candidate.id, skillId: skill.id })) });
+      }
+      if (candidate.leaderboardOptIn === null) {
+        await tx.user.updateMany({ where: { id: candidate.id, isDemo: true, leaderboardOptIn: null }, data: { leaderboardOptIn: true } });
+      }
+      if (await tx.dailyTask.count({ where: { candidateId: candidate.id, reflection: PRACTICE_NOTE } })) return;
+      for (let offset = 1; offset <= sample.days; offset++) {
+        const day = shiftDayKey(today, -offset);
+        const plans = buildDailyTasks({ candidateId: candidate.id, dateKey: day, skills: selected.length ? selected.map(({ skill }) => skill) : defaults });
+        const plan = plans.find((task) => task.points > 0 && task.acceptedAnswers.length > 0);
+        if (!plan) continue;
+        const answer = plan.acceptedAnswers[0];
+        if (!gradeDailyAnswer(plan.questionType, plan.acceptedAnswers, answer)) continue;
+        const completedAt = new Date(`${day}T12:00:00`);
+        await tx.dailyTask.upsert({
+          where: { candidateId_day_position: { candidateId: candidate.id, day, position: plan.position } },
+          update: {},
+          create: {
+            candidateId: candidate.id, skillId: plan.skillId, day, position: plan.position,
+            family: plan.family, title: plan.title, scenario: plan.scenario, steps: JSON.stringify(plan.steps),
+            estimateMinutes: plan.minutes, difficulty: plan.difficulty, question: plan.question,
+            answerKey: JSON.stringify({ type: plan.questionType, accepted: plan.acceptedAnswers, explanation: plan.explanation }),
+            points: plan.points, answer, attempts: 1, result: "CORRECT", solved: true,
+            earnedPoints: awardPoints(plan.points, 0), status: "DONE", completedAt, reflection: PRACTICE_NOTE,
+          },
+        });
+      }
+    });
+  }
 }

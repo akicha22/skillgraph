@@ -1,4 +1,4 @@
-# SkillGraph
+# SkillGraph · Built by AURA FARMERS
 
 ### Don't just tell employers what you know. Show them what you can do.
 

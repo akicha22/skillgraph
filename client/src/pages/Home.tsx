@@ -75,7 +75,7 @@ export default function Home() {
       </main>
       <footer className="border-t border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 md:px-6">
-          <Logo size="sm" />
+          <div><Logo size="sm" /><p className="mt-1 text-xs text-slate-600">Built by AURA FARMERS</p></div>
           <Link to="/login" className={buttonClasses({ variant: "ghost", size: "sm" })}>Sign in</Link>
         </div>
       </footer>
