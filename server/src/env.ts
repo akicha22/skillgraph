@@ -10,6 +10,7 @@ dotenv.config({ override: injectedEnvironment !== "test" && injectedEnvironment 
 
 const schema = z.object({
   PORT: z.coerce.number().default(4000),
+  CORS_ORIGIN: z.string().trim().default("http://localhost:5173"),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 characters"),
   NODE_ENV: z.string().default("development"),

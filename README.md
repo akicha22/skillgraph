@@ -38,7 +38,7 @@ npm run dev                    # API on :4000, client on :5173
 
 | Variable | Notes |
 |---|---|
-| `DATABASE_URL` | `file:./prisma/dev.db` when running from `server/` |
+| `DATABASE_URL` | `file:./dev.db` (relative to `server/prisma/schema.prisma`) |
 | `JWT_SECRET` | at least 16 characters |
 | `PORT` | defaults to `4000` |
 | `AI_PROVIDER` | `template` or `gemini` (optional) |

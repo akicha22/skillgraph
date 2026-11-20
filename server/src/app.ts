@@ -1,4 +1,4 @@
-import "./env";
+import { env } from "./env";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -24,18 +24,16 @@ import { locationsRouter } from "./routes/locations";
  * an ephemeral port so the real middleware and routers are exercised.
  */
 export const app = express();
-app.use(cors({ origin: "http://localhost:5173", credentials: true }));
+const allowedOrigins = env.CORS_ORIGIN.split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 
 app.get("/api/health", async (_req, res) => {
-  const users = await prisma.user.count();
-  res.json({
-    status: "ok",
-    database: "connected",
-    users,
-    aiProvider: process.env.AI_PROVIDER ?? "template",
-  });
+  await prisma.$queryRaw`SELECT 1`;
+  res.json({ status: "ok", database: "connected" });
 });
 
 app.use("/api/auth", authRouter);
