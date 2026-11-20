@@ -12,4 +12,6 @@ Every new set has ten distinct formats in order: spot the issue, make a choice, 
 - Use an exact answer only where the expected wording is unambiguous. Open-ended submissions unlock self-review criteria, count toward completion, and do not earn leaderboard points.
 - Run `npx tsx --test server/src/tasks/practice.test.ts`. Automated checks verify unique concepts and prompts, slot format, skill routing, and progression. Review relevance and difficulty editorially as well.
 
-Existing published sets and earned points are retained. Changes apply to newly generated sets.
+SQL, Civil Engineering, and Video Editing prompts use short practical operations, workplace application, and critique or trade-off decisions. Calculations belong only where they are part of the work (for example, slab quantity and a bending check). SQL snippets and editing plans are typed; the platform does not execute queries or require media uploads.
+
+Current-day unanswered legacy prompts are refreshed from the selected skill banks. Attempted and completed rows, notes, and earned points are retained. Unmatched, unanswered legacy prompts are not served. Increment the persisted bank revision in `candidateTasks.ts` when a future migration needs to refresh already-generated prompts.
