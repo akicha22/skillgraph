@@ -38,26 +38,10 @@ export default function Login() {
 
   return (
     <AuthCard title="Sign in" subtitle="Welcome back to SkillGraph.">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <Field label="Email" required>
-          {(attributes) => <Input {...attributes} type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />}
-        </Field>
-        <Field label="Password" required>
-          {(attributes) => <PasswordInput {...attributes} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />}
-        </Field>
-
-        {error && <Alert tone="error">{error}</Alert>}
-
-        <Button type="submit" loading={submitting} className="w-full">
-          {submitting ? "Signing in…" : "Sign in"}
-        </Button>
-      </form>
-
-      {import.meta.env.DEV && (
-        <div className="mt-6 border-t border-slate-200 pt-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-600">
-            Development only: fill a demo account
-          </p>
+      {(import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_LOGIN === "true") && (
+        <section id="demo-account" aria-labelledby="demo-account-title" className="mb-6 rounded-control bg-brand-50 p-4">
+          <h2 id="demo-account-title" className="font-semibold text-brand-900">Sign in using a demo account</h2>
+          <p className="mt-1 text-sm text-slate-600">Choose a role to fill in the form, then select Sign in.</p>
           <div className="mt-2 flex flex-wrap gap-2">
             <Button
               variant="secondary"
@@ -74,8 +58,23 @@ export default function Login() {
               Demo candidate
             </Button>
           </div>
-        </div>
+        </section>
       )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Field label="Email" required>
+          {(attributes) => <Input {...attributes} type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />}
+        </Field>
+        <Field label="Password" required>
+          {(attributes) => <PasswordInput {...attributes} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />}
+        </Field>
+
+        {error && <Alert tone="error">{error}</Alert>}
+
+        <Button type="submit" loading={submitting} className="w-full">
+          {submitting ? "Signing in…" : "Sign in"}
+        </Button>
+      </form>
 
       <p className="mt-6 text-center text-sm text-slate-600">
         New here?{" "}

@@ -30,6 +30,11 @@ export default function Home() {
               <Link to="/register/candidate" className={buttonClasses()}>I’m a candidate <ArrowRight aria-hidden="true" className="size-4 shrink-0" /></Link>
               <Link to="/register/recruiter" className={buttonClasses({ variant: "secondary" })}>I’m a recruiter</Link>
               <Link to="/login" className={buttonClasses({ variant: "ghost" })}>Sign in</Link>
+              {(import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_LOGIN === "true") && (
+                <Link to="/login#demo-account" className={buttonClasses({ variant: "secondary" })}>
+                  Sign in using a demo account
+                </Link>
+              )}
             </div>
           </div>
         </section>
