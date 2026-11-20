@@ -76,13 +76,19 @@ const BANK: Record<SkillFamily, Record<DailyDifficulty, Builder>> = {
   },
 
   SERVICE: {
-    BEGINNER: () => ({
-      question:
-        "A support ticket arrives at 10:15 and the first-response target is four hours. What is the latest response time in 24-hour HH:MM?",
-      type: "SHORT_TEXT",
-      accepted: ["14:15", "2:15 pm", "2:15pm"],
-      explanation: "Four hours after 10:15 is 14:15 (2:15 pm).",
-    }),
+    BEGINNER: (seed) => {
+      const startHour = 9 + (seedAt(seed, 36) % 2);
+      const startMinute = [0, 15, 30, 45][seedAt(seed, 37) % 4];
+      const targetHours = 3 + (seedAt(seed, 38) % 2);
+      const totalMinutes = startHour * 60 + startMinute + targetHours * 60;
+      const latest = `${String(Math.floor(totalMinutes / 60)).padStart(2, "0")}:${String(totalMinutes % 60).padStart(2, "0")}`;
+      return {
+        question: `A support ticket arrives at ${String(startHour).padStart(2, "0")}:${String(startMinute).padStart(2, "0")} and the first-response target is ${targetHours} hours. What is the latest response time in 24-hour HH:MM?`,
+        type: "SHORT_TEXT",
+        accepted: [latest],
+        explanation: `${targetHours} hours after ${String(startHour).padStart(2, "0")}:${String(startMinute).padStart(2, "0")} is ${latest}.`,
+      };
+    },
     INTERMEDIATE: (seed) => {
       const needs = 480 + (seedAt(seed, 5) % 5) * 20;
       const inStock = 360;
@@ -162,7 +168,7 @@ const BANK: Record<SkillFamily, Record<DailyDifficulty, Builder>> = {
       const rate = 4.5;
       const conversions = Math.round(visits * 0.9 * (rate / 100));
       return {
-        question: `Last month a site had ${money(visits)} visits and converted 4.5%. This month visits are down 10% and the conversion rate is unchanged. How many conversions this month?`,
+        question: `Last month a site had ${visits.toLocaleString("en-IN")} visits and converted 4.5%. This month visits are down 10% and the conversion rate is unchanged. How many conversions this month?`,
         type: "NUMBER",
         accepted: [rounded(conversions)],
         explanation: `Visits fall to ${Math.round(visits * 0.9)}, and 4.5% of that is ${conversions} conversions.`,
@@ -293,13 +299,17 @@ const BANK: Record<SkillFamily, Record<DailyDifficulty, Builder>> = {
   },
 
   CREATIVE: {
-    BEGINNER: () => ({
-      question:
-        "A campaign needs one key image, three social crops, one 20-second video cut-down and two banner sizes. How many assets is that in total?",
-      type: "NUMBER",
-      accepted: ["7"],
-      explanation: "1 + 3 + 1 + 2 = 7 assets.",
-    }),
+    BEGINNER: (seed) => {
+      const crops = 2 + (seedAt(seed, 39) % 3);
+      const banners = 1 + (seedAt(seed, 40) % 3);
+      const total = 1 + crops + 1 + banners;
+      return {
+        question: `A campaign needs one key image, ${crops} social crops, one 20-second video cut-down and ${banners} banner sizes. How many assets is that in total?`,
+        type: "NUMBER",
+        accepted: [String(total)],
+        explanation: `1 key image + ${crops} crops + 1 video + ${banners} banners = ${total} assets.`,
+      };
+    },
     INTERMEDIATE: (seed) => {
       const days = 10 + (seedAt(seed, 28) % 4) * 2;
       const production = 4;

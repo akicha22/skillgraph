@@ -121,6 +121,7 @@ test("every drill has a checkable question with a private answer key", () => {
     skills: SKILLS,
   });
 
+  assert.equal(new Set(tasks.map((task) => task.question)).size, tasks.length);
   for (const task of tasks) {
     assert.ok(task.question.length > 20);
     assert.ok(task.acceptedAnswers.length > 0);

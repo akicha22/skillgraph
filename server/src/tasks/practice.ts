@@ -85,6 +85,7 @@ export function buildDailyTasks(input: {
   // Difficulty climbs in blocks: three warm-up drills, four that add a constraint, three
   // application problems. The question bank makes the tiers differ in the work required.
   const tasks: DailyTaskPlan[] = [];
+  const usedQuestions = new Set<string>();
 
   for (let pos = 0; pos < 10; pos++) {
     // Cycle through skills: skill at index (offset + pos) % skills.length
@@ -102,7 +103,17 @@ export function buildDailyTasks(input: {
       jobTitle: input.jobTitle,
       requirementsText: input.requirementsText,
     });
-    const question = buildDailyQuestion({ seed, family: drill.family, difficulty });
+    // Cycling a small skill set can repeat a template. Vary the seed until the wording is new,
+    // so a day's set never shows the same question twice.
+    let question = buildDailyQuestion({ seed, family: drill.family, difficulty });
+    for (let attempt = 1; attempt < 8 && usedQuestions.has(question.question); attempt++) {
+      question = buildDailyQuestion({
+        seed: seed + attempt * 104729,
+        family: drill.family,
+        difficulty,
+      });
+    }
+    usedQuestions.add(question.question);
 
     tasks.push({
       ...drill,

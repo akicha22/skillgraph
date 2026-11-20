@@ -1,5 +1,12 @@
-import "dotenv/config";
+import dotenv from "dotenv";
 import { z } from "zod";
+
+// Local runs must use this project's .env. A shell or machine environment can carry stale
+// values — an empty DATABASE_URL target or PORT=0 — that otherwise shadow the project config and
+// make every existing account look missing. Tests set their own throwaway database before the app
+// loads, so they are excluded from the override.
+const injectedEnvironment = process.env.NODE_ENV;
+dotenv.config({ override: injectedEnvironment !== "test" && injectedEnvironment !== "production" });
 
 const schema = z.object({
   PORT: z.coerce.number().default(4000),

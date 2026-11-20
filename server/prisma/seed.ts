@@ -1,4 +1,6 @@
-import "dotenv/config";
+// Loads the project's .env with the same precedence as the API, so seeding cannot silently
+// target a different SQLite file than the one the server reads.
+import "../src/env";
 import { prisma } from "../src/db";
 import { hashPassword } from "../src/auth/password";
 import { seedSkills } from "./seedSkills";

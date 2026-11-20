@@ -180,9 +180,18 @@ candidateTasksRouter.get(
       }
     }
 
-    // Rows created before the graded-question fields existed have no question. They are
-    // backfilled from the same deterministic plan rather than leaving a blank drill on the page.
-    if (tasks.length > 0 && tasks.some((task) => !task.question)) {
+    // Rows created before the graded-question fields existed have no question. A repeated question
+    // can also survive from an older generator. Both are repaired from the current plan, but never
+    // on a drill the candidate has already attempted.
+    const repeatedQuestions = new Set(
+      tasks
+        .map((task) => task.question)
+        .filter((question, index, all) => question !== "" && all.indexOf(question) !== index),
+    );
+    if (
+      tasks.length > 0 &&
+      (tasks.some((task) => !task.question) || repeatedQuestions.size > 0)
+    ) {
       const skills = await prisma.candidateSkill.findMany({
         where: { userId: candidateId },
         orderBy: { createdAt: "asc" },
@@ -195,7 +204,11 @@ candidateTasksRouter.get(
       });
       const updates = tasks.flatMap((task) => {
         const plan = plans.find((row) => row.position === task.position);
-        if (!plan || task.question) return [];
+        if (!plan) return [];
+        const missing = !task.question;
+        const repeated = repeatedQuestions.has(task.question);
+        if (!missing && !repeated) return [];
+        if (!missing && (task.solved || task.attempts > 0)) return [];
         return [
           prisma.dailyTask.update({
             where: { id: task.id },
