@@ -1,12 +1,13 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
+import type { FormEvent } from "react";
 import { Link, Navigate } from "react-router-dom";
-import AuthCard from "../components/AuthCard";
+import AuthCard, { PasswordInput } from "../components/AuthCard";
+import { Button } from "../components/ui/Button";
+import { Alert } from "../components/ui/Card";
+import { Field, Input } from "../components/ui/Field";
 import { useAuth } from "../hooks/useAuth";
 import { ApiError } from "../services/api";
 import { dashboardPath, type Role } from "../types/auth";
-
-const inputClass =
-  "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200";
 
 const copy = {
   CANDIDATE: {
@@ -58,66 +59,30 @@ export default function Register({ role }: { role: Role }) {
   return (
     <AuthCard title={c.title} subtitle={c.subtitle}>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <label className="block text-sm font-medium text-slate-700">
-          Full name
-          <input
-            type="text"
-            required
-            autoComplete="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className={inputClass}
-          />
-          {fieldErrors.name && <span className="mt-1 block text-xs text-red-600">{fieldErrors.name}</span>}
-        </label>
-        <label className="block text-sm font-medium text-slate-700">
-          Email
-          <input
-            type="email"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className={inputClass}
-          />
-          {fieldErrors.email && <span className="mt-1 block text-xs text-red-600">{fieldErrors.email}</span>}
-        </label>
-        <label className="block text-sm font-medium text-slate-700">
-          Password
-          <input
-            type="password"
-            required
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className={inputClass}
-          />
-          <span className="mt-1 block text-xs text-slate-400">
-            At least 8 characters, with a letter and a number.
-          </span>
-          {fieldErrors.password && (
-            <span className="mt-1 block text-xs text-red-600">{fieldErrors.password}</span>
-          )}
-        </label>
+        <Field label="Full name" required error={fieldErrors.name}>
+          {(attributes) => <Input {...attributes} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />}
+        </Field>
+        <Field label="Email" required error={fieldErrors.email}>
+          {(attributes) => <Input {...attributes} type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />}
+        </Field>
+        <Field label="Password" required hint="At least 8 characters, with a letter and a number." error={fieldErrors.password}>
+          {(attributes) => <PasswordInput {...attributes} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />}
+        </Field>
 
-        {formError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{formError}</p>}
+        {formError && <Alert tone="error">{formError}</Alert>}
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
-        >
+        <Button type="submit" loading={submitting} className="w-full">
           {submitting ? "Creating account…" : "Create account"}
-        </button>
+        </Button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-slate-500">
+      <p className="mt-6 text-center text-sm text-slate-600">
         Already registered?{" "}
-        <Link to="/login" className="font-medium text-indigo-600 hover:underline">
+        <Link to="/login" className="font-medium text-brand-700 hover:underline">
           Sign in
         </Link>
         <br />
-        <Link to={c.switchTo} className="font-medium text-indigo-600 hover:underline">
+        <Link to={c.switchTo} className="font-medium text-brand-700 hover:underline">
           {c.switchLabel}
         </Link>
       </p>
