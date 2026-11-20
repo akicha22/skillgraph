@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   AlertTriangle,
@@ -16,6 +16,7 @@ import {
   getCandidateAssessment,
   getCandidateAttempt,
   getCandidateProfile,
+  postAttemptEvents,
   saveAttemptFollowUp,
   saveCandidateAnswer,
   startCandidateAttempt,
@@ -26,6 +27,7 @@ import {
   DIFFICULTY_LABELS,
   LEVEL_LABELS,
   TASK_TYPE_LABELS,
+  type AttemptEventInput,
   type CandidateAssessmentDetail,
   type CandidateAttempt,
   type CandidateFollowUps,
@@ -34,6 +36,7 @@ import {
 export default function CandidateAssessmentPage() {
   const { versionId = "" } = useParams();
   const [assessment, setAssessment] = useState<CandidateAssessmentDetail | null>(null);
+  const [assessmentVersionId, setAssessmentVersionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [attempt, setAttempt] = useState<CandidateAttempt | null>(null);
@@ -60,12 +63,85 @@ export default function CandidateAssessmentPage() {
   const submittedAttemptId =
     attempt?.status === "SUBMITTED" && attemptVersionId === versionId ? attempt.id : null;
 
+  const eventQueueRef = useRef<AttemptEventInput[]>([]);
+  const flushPromiseRef = useRef<Promise<void> | null>(null);
+  const lastOpenedTaskRef = useRef<string | null>(null);
+
+  const visibleTaskId =
+    assessment && assessment.tasks.length > 0
+      ? assessment.tasks[Math.min(activeIndex, assessment.tasks.length - 1)]?.id
+      : undefined;
+  const eventAttempt =
+    attemptVersionId === versionId && assessmentVersionId === versionId ? attempt : null;
+  const eventAttemptId = eventAttempt?.id ?? null;
+  const eventsEnabled =
+    eventAttempt?.status === "IN_PROGRESS" && typeof consentAt === "string";
+
+  const flushEvents = useCallback(() => {
+    if (!eventsEnabled || !eventAttemptId) return Promise.resolve();
+    if (flushPromiseRef.current) return flushPromiseRef.current;
+
+    const run = (async () => {
+      while (eventQueueRef.current.length > 0) {
+        const batch = eventQueueRef.current.splice(0, 50);
+        try {
+          await postAttemptEvents(eventAttemptId, batch);
+        } catch {
+          // Activity tracking is best-effort; never surface or block on it.
+          break;
+        }
+      }
+    })().finally(() => {
+      flushPromiseRef.current = null;
+    });
+
+    flushPromiseRef.current = run;
+    return run;
+  }, [eventAttemptId, eventsEnabled]);
+
+  useEffect(() => {
+    eventQueueRef.current = [];
+    lastOpenedTaskRef.current = null;
+  }, [attempt?.id, versionId]);
+
+  useEffect(() => {
+    if (!eventsEnabled || !eventAttemptId || !visibleTaskId) {
+      lastOpenedTaskRef.current = null;
+      return;
+    }
+    const key = `${eventAttemptId}:${visibleTaskId}`;
+    if (lastOpenedTaskRef.current === key) return;
+    lastOpenedTaskRef.current = key;
+    eventQueueRef.current.push({ type: "TASK_OPENED", taskId: visibleTaskId });
+  }, [eventAttemptId, eventsEnabled, visibleTaskId]);
+
+  useEffect(() => {
+    if (!eventsEnabled) return;
+    const timer = window.setInterval(() => {
+      void flushEvents();
+    }, 15_000);
+    return () => window.clearInterval(timer);
+  }, [eventsEnabled, flushEvents]);
+
+  useEffect(() => {
+    if (!eventsEnabled) return;
+    const handleVisibilityChange = () => {
+      if (!eventsEnabled) return;
+      eventQueueRef.current.push({
+        type: document.visibilityState === "hidden" ? "FOCUS_LOST" : "FOCUS_RESTORED",
+      });
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [eventsEnabled]);
+
   useEffect(() => {
     let cancelled = false;
     getCandidateAssessment(versionId)
       .then((loaded) => {
         if (cancelled) return;
         setAssessment(loaded);
+        setAssessmentVersionId(versionId);
         setActiveIndex(0);
       })
       .catch((err) => {
@@ -242,6 +318,8 @@ export default function CandidateAssessmentPage() {
     setSubmitting(true);
     setAttemptError(null);
     try {
+      // Send queued activity before the attempt locks; failures are already swallowed.
+      await flushEvents();
       setAttempt(await submitCandidateAttempt(attempt.id));
       setConfirmingSubmit(false);
     } catch (err) {
@@ -793,6 +871,16 @@ export default function CandidateAssessmentPage() {
                       onChange={(event) =>
                         setDrafts((prev) => ({ ...prev, [activeTask.id]: event.target.value }))
                       }
+                      onPaste={(event) => {
+                        if (!eventsEnabled) return;
+                        eventQueueRef.current.push({
+                          type: "PASTE",
+                          taskId: activeTask.id,
+                          metadata: {
+                            length: event.clipboardData?.getData("text").length ?? 0,
+                          },
+                        });
+                      }}
                       placeholder="Type your answer here"
                       className="mt-2 w-full rounded-xl border border-slate-300 p-3 text-sm leading-relaxed text-slate-800 focus:border-indigo-500 focus:outline-none"
                     />
@@ -813,6 +901,9 @@ export default function CandidateAssessmentPage() {
                         {(drafts[activeTask.id] ?? "").length} characters
                       </span>
                     </div>
+                    <p className="mt-2 text-xs text-slate-500">
+                      Activity such as paste and tab-switching is recorded for the recruiter.
+                    </p>
                   </>
                 )}
               </div>

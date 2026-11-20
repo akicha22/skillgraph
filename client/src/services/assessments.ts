@@ -11,6 +11,7 @@ import type {
   ClarificationQuestion,
   DailyTask,
   DailyTaskAnswerResponse,
+  AttemptEventInput,
   LeaderboardResponse,
   LocationSuggestion,
   CriterionScoreInput,
@@ -291,4 +292,9 @@ export function submitCandidateAttempt(attemptId: string) {
 /** Saves one task's answer, replacing any earlier draft of it. */
 export function saveCandidateAnswer(attemptId: string, taskId: string, answer: string) {
   return api.put<CandidateResponse>(`/candidate/attempts/${attemptId}/responses/${taskId}`, { answer });
+}
+
+/** Records a batch of client activity signals; the server accepts at most 50 per request. */
+export function postAttemptEvents(attemptId: string, events: AttemptEventInput[]) {
+  return api.post<{ recorded: number }>(`/candidate/attempts/${attemptId}/events`, { events });
 }

@@ -466,6 +466,21 @@ export type CandidateAssessmentList = { assessments: CandidateAssessmentSummary[
 
 export type CandidateAttemptStatus = "IN_PROGRESS" | "SUBMITTED";
 
+export type AttemptEventType =
+  | "TASK_OPENED"
+  | "ANSWER_SAVED"
+  | "PASTE"
+  | "FOCUS_LOST"
+  | "FOCUS_RESTORED"
+  | "SUBMITTED";
+
+/** One client-side activity signal; metadata must never contain answer or pasted text. */
+export type AttemptEventInput = {
+  type: AttemptEventType;
+  taskId?: string;
+  metadata?: Record<string, number | string>;
+};
+
 export type CandidateResponse = {
   taskId: string;
   answer: string;
