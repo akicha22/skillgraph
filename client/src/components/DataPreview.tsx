@@ -85,22 +85,22 @@ export default function DataPreview({ data }: { data: Record<string, unknown> })
   return (
     <div className="space-y-3">
       {hasTable && columns && rows && (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <div className="max-h-80 max-w-full overflow-auto rounded-control border border-slate-200 bg-white" role="region" aria-label="Task dataset" tabIndex={0}>
+          <table className="w-full border-separate border-spacing-0 text-left text-sm tabular-nums">
+            <thead className="text-xs uppercase tracking-wide text-slate-600">
               <tr>
                 {columns.map((column) => (
-                  <th key={column} scope="col" className="whitespace-nowrap px-3 py-2">
+                  <th key={column} scope="col" className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-3 py-3 whitespace-nowrap">
                     {humanize(column)}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="[&_tr:nth-child(even)]:bg-slate-50">
               {rows.map((row, index) => (
                 <tr key={index}>
                   {columns.map((column) => (
-                    <td key={column} className="whitespace-nowrap px-3 py-2 text-slate-700">
+                    <td key={column} className="border-b border-slate-100 px-3 py-2 whitespace-nowrap text-slate-700">
                       {String(row[column] ?? "")}
                     </td>
                   ))}
