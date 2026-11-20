@@ -1,3 +1,6 @@
+import { Alert, Badge, Card, StatTile } from "../components/ui/Card";
+import { EmptyState, Skeleton } from "../components/ui/Feedback";
+import { buttonClasses } from "../components/ui/cx";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckCircle2, ClipboardList, Megaphone } from "lucide-react";
@@ -51,77 +54,63 @@ export default function CandidateDashboard() {
 
   return (
     <DashboardLayout>
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
-        <h1 className="text-2xl font-semibold text-slate-900">Welcome, {user?.name}</h1>
-        <p className="mt-1 text-slate-600">
-          Take the assessments you have open, revisit your finished ones, and see what recruiters are
-          hiring for.
-        </p>
-        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-indigo-700">
-            <ClipboardList className="h-3.5 w-3.5" aria-hidden />
-            {open.length} open
-          </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700">
-            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
-            {completed.length} completed
-          </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1">
-            <Megaphone className="h-3.5 w-3.5" aria-hidden />
-            {posts?.length ?? 0} recruiter posts
-          </span>
-          <div className="ml-auto flex flex-wrap items-center gap-3 font-medium">
-            <Link to="/candidate/tasks" className="text-indigo-600 hover:underline">
-              Daily tasks
-            </Link>
-            <Link to="/candidate/posts" className="text-indigo-600 hover:underline">
-              Opportunities
-            </Link>
-            <Link to="/candidate/profile" className="text-indigo-600 hover:underline">
-              Your profile
-            </Link>
-          </div>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="max-w-2xl">
+          <h1 className="text-[1.75rem] font-semibold tracking-tight">Welcome, {user?.name}</h1>
+          <p className="mt-1 text-slate-600">Take the assessments you have open, revisit your finished ones, and see what recruiters are hiring for.</p>
         </div>
+        {open[0] && <Link to={`/candidate/assessments/${open[0].id}`} className={buttonClasses()}>{open[0].attempt ? "Continue assessment" : "Open next assessment"}</Link>}
+      </header>
+      <section aria-label="Your activity" className="grid gap-3 sm:grid-cols-3">
+        {assessments && <StatTile label="Open assessments" value={open.length} icon={<ClipboardList className="size-4" />} />}
+        {assessments && <StatTile label="Completed assessments" value={completed.length} icon={<CheckCircle2 className="size-4" />} />}
+        {posts && <StatTile label="Recruiter posts" value={posts.length} icon={<Megaphone className="size-4" />} />}
       </section>
+      <nav aria-label="Candidate shortcuts" className="flex flex-wrap gap-2">
+        <Link to="/candidate/tasks" className={buttonClasses({ variant: "secondary" })}>Daily tasks</Link>
+        <Link to="/candidate/posts" className={buttonClasses({ variant: "secondary" })}>Opportunities</Link>
+        <Link to="/candidate/profile" className={buttonClasses({ variant: "secondary" })}>Your profile</Link>
+      </nav>
 
       <section className="grid gap-3 sm:grid-cols-2">
         <Link
           to="/candidate/tasks"
-          className="rounded-2xl border border-slate-200 bg-white p-5 hover:border-indigo-300"
+          className="block rounded-card"
         >
-          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Practise</p>
+          <Card className="h-full motion-safe:transition-shadow hover:shadow-raised">
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Practise</p>
           <h2 className="mt-1 text-lg font-semibold text-slate-900">Today&apos;s practice tasks</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Three short drills from your skills. Unmarked and private — preparation, not an exam.
+            Short drills from your skills. Unmarked and private — preparation, not an exam.
           </p>
+          </Card>
         </Link>
         <Link
           to="/candidate/posts"
-          className="rounded-2xl border border-slate-200 bg-white p-5 hover:border-indigo-300"
+          className="block rounded-card"
         >
+          <Card className="h-full motion-safe:transition-shadow hover:shadow-raised">
           <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Discover</p>
           <h2 className="mt-1 text-lg font-semibold text-slate-900">Open roles</h2>
           <p className="mt-1 text-sm text-slate-600">
             Requirements posts from recruiters, with the skills and experience each role needs.
           </p>
+          </Card>
         </Link>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+      <Card>
         <h2 className="text-lg font-semibold text-slate-900">Open assessments</h2>
         <p className="mt-1 text-sm text-slate-600">
           Assessments you have not submitted yet. Submitting locks your answers, so finish every task
           first.
         </p>
         {error ? (
-          <p className="mt-2 text-sm text-rose-700">{error}</p>
+          <Alert tone="error" className="mt-3">{error}</Alert>
         ) : assessments === null ? (
-          <p className="mt-2 text-sm text-slate-600">Loading assessments…</p>
+          <div role="status" className="mt-3 space-y-2"><span className="sr-only">Loading assessments…</span><Skeleton className="h-16" /></div>
         ) : open.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-600">
-            Nothing open right now. Published assessments appear here as soon as a recruiter
-            publishes one.
-          </p>
+          <EmptyState title="Nothing open right now" text="Published assessments appear here as soon as a recruiter publishes one." action={<Link to="/candidate/tasks" className={buttonClasses({ variant: "secondary" })}>Daily tasks</Link>} />
         ) : (
           <ul className="mt-3 space-y-3">
             {open.map((assessment) => (
@@ -136,7 +125,7 @@ export default function CandidateDashboard() {
                 </p>
                 <Link
                   to={`/candidate/assessments/${assessment.id}`}
-                  className="mt-3 inline-block rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+                  className={buttonClasses({ variant: "secondary", size: "sm", className: "mt-3" })}
                 >
                   {assessment.attempt ? "Continue assessment" : "Open assessment"}
                 </Link>
@@ -144,17 +133,19 @@ export default function CandidateDashboard() {
             ))}
           </ul>
         )}
-      </section>
+      </Card>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+      <Card>
         <h2 className="text-lg font-semibold text-slate-900">Completed assessments</h2>
         <p className="mt-1 text-sm text-slate-600">
           Submitted attempts. Marks appear as the recruiter reviews each criterion.
         </p>
-        {assessments === null ? (
-          <p className="mt-2 text-sm text-slate-600">Loading completed assessments…</p>
+        {error ? (
+          <Alert tone="error" className="mt-3">{error}</Alert>
+        ) : assessments === null ? (
+          <div role="status" className="mt-3 space-y-2"><span className="sr-only">Loading completed assessments…</span><Skeleton className="h-16" /></div>
         ) : completed.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-600">You have not submitted an assessment yet.</p>
+          <EmptyState title="No completed assessments" text="You have not submitted an assessment yet." />
         ) : (
           <ul className="mt-3 divide-y divide-slate-100">
             {completed.map((assessment) => (
@@ -172,14 +163,14 @@ export default function CandidateDashboard() {
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+                  <Badge tone="success" className="tabular-nums">
                     {assessment.attempt && assessment.attempt.awarded > 0
                       ? `${assessment.attempt.awarded} / ${assessment.attempt.possible}`
                       : "Marks pending"}
-                  </span>
+                  </Badge>
                   <Link
                     to={`/candidate/assessments/${assessment.id}`}
-                    className="text-sm font-medium text-indigo-600 hover:underline"
+                    className="text-sm font-medium text-brand-700 hover:underline"
                   >
                     View result
                   </Link>
@@ -188,12 +179,12 @@ export default function CandidateDashboard() {
             ))}
           </ul>
         )}
-      </section>
+      </Card>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+      <Card>
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-lg font-semibold text-slate-900">Opportunities for you</h2>
-          <Link to="/candidate/posts" className="text-sm font-medium text-indigo-600 hover:underline">
+          <Link to="/candidate/posts" className="text-sm font-medium text-brand-700 hover:underline">
             See all openings
           </Link>
         </div>
@@ -201,11 +192,11 @@ export default function CandidateDashboard() {
           What recruiters are hiring for right now. A post is a requirement, not an assessment.
         </p>
         {postsError ? (
-          <p className="mt-2 text-sm text-rose-700">{postsError}</p>
+          <Alert tone="error" className="mt-3">{postsError}</Alert>
         ) : posts === null ? (
-          <p className="mt-2 text-sm text-slate-600">Loading posts…</p>
+          <div role="status" className="mt-3 space-y-2"><span className="sr-only">Loading posts…</span><Skeleton className="h-16" /></div>
         ) : posts.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-600">No openings have been posted yet.</p>
+          <EmptyState title="No openings yet" text="No openings have been posted yet." />
         ) : (
           <ul className="mt-3 space-y-3">
             {posts.map((post) => (
@@ -223,7 +214,7 @@ export default function CandidateDashboard() {
             ))}
           </ul>
         )}
-      </section>
+      </Card>
     </DashboardLayout>
   );
 }

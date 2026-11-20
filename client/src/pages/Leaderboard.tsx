@@ -1,6 +1,9 @@
+import { Alert, Badge, Card, StatTile } from "../components/ui/Card";
+import { EmptyState, Skeleton } from "../components/ui/Feedback";
+import { buttonClasses } from "../components/ui/cx";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, Trophy, Users } from "lucide-react";
+import { Trophy, Users } from "lucide-react";
 import DashboardLayout from "../layouts/DashboardLayout";
 import { useAuth } from "../hooks/useAuth";
 import { getLeaderboard } from "../services/assessments";
@@ -49,11 +52,11 @@ export default function Leaderboard() {
 
   return (
     <DashboardLayout>
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+      <header>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="flex items-center gap-2 text-2xl font-semibold text-slate-900">
-              <Trophy className="h-6 w-6 text-indigo-600" aria-hidden />
+            <h1 className="flex items-center gap-2 text-[1.75rem] font-semibold tracking-tight text-slate-900">
+              <Trophy className="h-6 w-6 text-brand-700" aria-hidden />
               Leaderboard
             </h1>
             <p className="mt-1 max-w-2xl text-slate-600">
@@ -67,7 +70,7 @@ export default function Leaderboard() {
                   Only candidates who opted in from their{" "}
                   <Link
                     to="/candidate/profile"
-                    className="font-medium text-indigo-600 hover:underline"
+                    className="font-medium text-brand-700 hover:underline"
                   >
                     profile settings
                   </Link>{" "}
@@ -80,160 +83,81 @@ export default function Leaderboard() {
           </div>
           <Link
             to={isCandidate ? "/candidate/tasks" : "/recruiter"}
-            className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            className={buttonClasses()}
           >
             {isCandidate ? "Practise today" : "Back to overview"}
           </Link>
         </div>
-      </section>
+      </header>
 
-      {error && (
-        <p className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          <span>{error}</span>
-        </p>
-      )}
-
+      {error && <Alert tone="error">{error}</Alert>}
       {data === null && !error && (
-        <p className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
-          Loading the rankings…
-        </p>
+        <Card role="status" className="space-y-3">
+          <span className="sr-only">Loading the rankings…</span>
+          <Skeleton className="h-6 w-1/3" /><Skeleton className="h-24" />
+        </Card>
       )}
 
       {data && (
-        <>
-          <section className="grid gap-4 sm:grid-cols-3">
+        <div className="space-y-6 tabular-nums">
+          <section aria-label="Ranking summary" className="grid gap-4 sm:grid-cols-3">
             {isCandidate ? (
               <>
-                <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Your rank
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold text-slate-900">
-                    {data.me.rank === null ? "Unranked" : `#${data.me.rank}`}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {data.me.rank === null
-                      ? "Solve a daily task to enter the rankings."
-                      : `of ${data.entries.length} ranked candidate${data.entries.length === 1 ? "" : "s"}`}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Your points
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold text-indigo-700">{data.me.points}</p>
-                  <p className="mt-1 text-xs text-slate-500">Earned from daily practice</p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Tasks solved
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold text-slate-900">
-                    {data.me.tasksSolved}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Every correct submission counts once
-                  </p>
-                </div>
+                <StatTile label="Your rank" value={data.me.rank ?? "—"} detail={data.me.rank === null
+                  ? "Solve a daily task to enter the rankings."
+                  : `of ${data.entries.length} ranked candidate${data.entries.length === 1 ? "" : "s"}`} />
+                <StatTile label="Your points" value={data.me.points} detail="Earned from daily practice" />
+                <StatTile label="Tasks solved" value={data.me.tasksSolved} detail="Every correct submission counts once" />
               </>
             ) : (
               <>
-                <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Ranked candidates
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold text-slate-900">
-                    {data.entries.length}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">Candidates with points</p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Points awarded
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold text-indigo-700">{totals.points}</p>
-                  <p className="mt-1 text-xs text-slate-500">Across daily practice</p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Tasks solved
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold text-slate-900">{totals.solved}</p>
-                  <p className="mt-1 text-xs text-slate-500">Correct submissions to date</p>
-                </div>
+                <StatTile label="Ranked candidates" value={data.entries.length} detail="Candidates with points" />
+                <StatTile label="Points awarded" value={totals.points} detail="Across daily practice" />
+                <StatTile label="Tasks solved" value={totals.solved} detail="Correct submissions to date" />
               </>
             )}
           </section>
-
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          {data.entries.length > 0 && (
+            <section aria-labelledby="podium-heading" className="hidden md:block">
+              <h2 id="podium-heading" className="mb-3 text-xl font-semibold tracking-tight">Podium</h2>
+              <ol className="grid grid-cols-3 items-end gap-4">
+                {data.entries.slice(0, 3).map((entry, index) => (
+                  <li key={`${entry.rank}-${entry.name}-${index}`} className={index === 0 ? "col-start-2 row-start-1" : index === 1 ? "col-start-1 row-start-1" : "col-start-3 row-start-1"}>
+                    <Card className={`text-center wrap-break-word ${index === 0 ? "min-h-44 border-accent-200" : "min-h-36"} ${entry.isMe ? "ring-2 ring-brand-500" : ""}`}>
+                      <Badge tone="accent">Rank {entry.rank}</Badge>
+                      <p className="mt-2 font-semibold">{entry.name}{entry.isMe && <Badge tone="brand" className="ml-2">You</Badge>}</p>
+                      <p className="mt-1 text-sm text-slate-600">{entry.points} points</p>
+                    </Card>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+          <Card>
             {data.entries.length === 0 ? (
-              <div className="p-8 text-center">
-                <Users className="mx-auto h-6 w-6 text-slate-400" aria-hidden />
-                <h2 className="mt-2 text-lg font-semibold text-slate-900">No points yet</h2>
-                <p className="mx-auto mt-1 max-w-md text-sm text-slate-600">
-                  The leaderboard opens as soon as a candidate solves a daily task correctly.
-                </p>
-              </div>
+              <EmptyState icon={<Users className="size-5" />} title="No points yet" text="The leaderboard opens as soon as a candidate solves a daily task correctly." action={isCandidate ? <Link to="/candidate/tasks" className={buttonClasses()}>Practise today</Link> : undefined} />
             ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200 text-sm">
-                  <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <tr>
-                      <th scope="col" className="px-4 py-3">
-                        Rank
-                      </th>
-                      <th scope="col" className="px-4 py-3">
-                        Candidate
-                      </th>
-                      <th scope="col" className="px-4 py-3 text-right">
-                        Tasks solved
-                      </th>
-                      <th scope="col" className="px-4 py-3 text-right">
-                        Points
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {data.entries.map((entry, index) => (
-                      <tr
-                        key={`${entry.rank}-${entry.name}-${index}`}
-                        className={entry.isMe ? "bg-indigo-50/70" : undefined}
-                      >
-                        <td className="px-4 py-3">
-                          <span
-                            className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${rankStyle(entry.rank)}`}
-                          >
-                            {entry.rank}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 font-medium text-slate-900">
-                          {entry.name}
-                          {entry.isMe && (
-                            <span className="ml-2 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
-                              You
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right text-slate-600">
-                          {entry.tasksSolved}
-                        </td>
-                        <td className="px-4 py-3 text-right font-semibold text-slate-900">
-                          {entry.points}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                <h2 className="mb-3 text-xl font-semibold tracking-tight">Rankings</h2>
+                <ol className="space-y-2">
+                  {data.entries.map((entry, index) => (
+                    <li key={`${entry.rank}-${entry.name}-${index}`} className={`grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 rounded-control px-3 py-2 md:grid-cols-[auto_minmax(0,1fr)_auto_auto] md:gap-x-6 ${entry.isMe ? "bg-brand-50 ring-1 ring-brand-200" : "bg-slate-50"}`}>
+                      <span className={`inline-flex min-h-8 min-w-8 items-center justify-center rounded-full px-2 text-xs font-semibold ${rankStyle(entry.rank)}`}><span className="sr-only">Rank </span>{entry.rank}</span>
+                      <span className="min-w-0 font-medium wrap-break-word">{entry.name}{entry.isMe && <Badge tone="brand" className="ml-2">You</Badge>}</span>
+                      <span className="col-start-2 text-sm text-slate-600 md:col-start-auto">{entry.tasksSolved} tasks solved</span>
+                      <span className="col-start-2 text-sm font-semibold md:col-start-auto">{entry.points} points</span>
+                    </li>
+                  ))}
+                </ol>
+              </>
             )}
-          </section>
+          </Card>
 
           <p className="text-xs text-slate-500">
             Ranked by total points. Candidates on equal points share a rank. Only practice points
             and task counts are shown — answers and notes stay private to each candidate.
           </p>
-        </>
+        </div>
       )}
     </DashboardLayout>
   );

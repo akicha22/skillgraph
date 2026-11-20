@@ -1,7 +1,11 @@
+import { Button } from "../components/ui/Button";
+import { Alert, Badge, Card } from "../components/ui/Card";
+import { Textarea } from "../components/ui/Field";
+import { EmptyState, Skeleton } from "../components/ui/Feedback";
+import { buttonClasses } from "../components/ui/cx";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  AlertTriangle,
   CheckCircle2,
   Clock,
   Flame,
@@ -10,7 +14,6 @@ import {
   Save,
   Send,
   Trophy,
-  XCircle,
 } from "lucide-react";
 import DashboardLayout from "../layouts/DashboardLayout";
 import {
@@ -174,26 +177,26 @@ export default function CandidateTasks() {
 
   return (
     <DashboardLayout>
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+      <header>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">Daily tasks</h1>
+            <h1 className="text-[1.75rem] font-semibold tracking-tight text-slate-900">Daily tasks</h1>
             <p className="mt-1 max-w-2xl text-slate-600">
               Practise ten workplace challenges, from quick warm-ups to tougher decisions.
               Checkable answers earn points; practical outputs unlock criteria for reviewing your own work.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Link
               to="/candidate/leaderboard"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              className={buttonClasses({ variant: "secondary" })}
             >
               <Trophy className="h-4 w-4" aria-hidden />
               Leaderboard
             </Link>
             <Link
               to="/candidate"
-              className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+              className={buttonClasses()}
             >
               Assessments
             </Link>
@@ -202,19 +205,19 @@ export default function CandidateTasks() {
 
         {data && (
           <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-amber-800">
+            <Badge tone="accent" className="items-center gap-1.5 tabular-nums">
               <Flame className="h-3.5 w-3.5" aria-hidden />
               {data.summary.streakDays} day streak
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700">
+            </Badge>
+            <Badge tone="success" className="items-center gap-1.5 tabular-nums">
               <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
               {data.summary.todayDone} of {data.summary.todayTotal} solved today
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 font-medium text-indigo-700">
+            </Badge>
+            <Badge tone="accent" className="items-center gap-1.5 tabular-nums">
               <Trophy className="h-3.5 w-3.5" aria-hidden />
               {data.summary.totalPoints} points total
               {data.summary.todayPoints > 0 ? ` · +${data.summary.todayPoints} today` : ""}
-            </span>
+            </Badge>
             {todayLabel && (
               <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">
                 {todayLabel}
@@ -227,7 +230,7 @@ export default function CandidateTasks() {
                   title={`${day.day}: ${day.done} of ${day.total} done`}
                   className={`flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-semibold ${
                     day.total === 0
-                      ? "bg-slate-100 text-slate-400"
+                      ? "bg-slate-100 text-slate-600"
                       : day.done === day.total
                         ? "bg-emerald-500 text-white"
                         : day.done > 0
@@ -241,48 +244,30 @@ export default function CandidateTasks() {
             </span>
           </div>
         )}
-      </section>
+      </header>
 
-      {error && (
-        <p className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          <span>{error}</span>
-        </p>
-      )}
-
-      {notice && <p className="text-sm text-emerald-700">{notice}</p>}
+      {error && <Alert tone="error">{error}</Alert>}
+      {notice && <Alert tone="info" role="status">{notice}</Alert>}
 
       {data === null ? (
-        <p className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
-          Building today's practice set…
-        </p>
+        !error && <Card role="status" className="space-y-3"><span className="sr-only">Building today's practice set…</span><Skeleton className="h-6 w-1/2" /><Skeleton className="h-24" /></Card>
       ) : data.needsSkills || data.needsSupportedSkills ? (
-        <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
-          <ListChecks className="mx-auto h-6 w-6 text-slate-400" aria-hidden />
-          <h2 className="mt-2 text-lg font-semibold text-slate-900">{data.needsSupportedSkills ? "No daily bank for your selected skills yet" : "Choose your skills first"}</h2>
-          <p className="mx-auto mt-1 max-w-md text-sm text-slate-600">
-            Daily practice is available for Sales, Client Communication, Leadership, Graphic Design,
-            Video Editing, UI/UX Design, Excel, and SQL. Choose a relevant skill to get started.
-          </p>
-          <Link
-            to="/candidate/skills"
-            className="mt-4 inline-block rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-          >
-            Choose skills
-          </Link>
-        </section>
+        <Card><EmptyState
+          icon={<ListChecks className="size-5" />}
+          title={data.needsSupportedSkills ? "No daily bank for your selected skills yet" : "Choose your skills first"}
+          text="Daily practice is available for Sales, Client Communication, Leadership, Graphic Design, Video Editing, UI/UX Design, Excel, and SQL. Choose a relevant skill to get started."
+          action={<Link to="/candidate/skills" className={buttonClasses()}>Choose skills</Link>}
+        /></Card>
       ) : activeTask ? (
-        <section className="space-y-4" aria-label="Daily challenges">
+        <section className="mx-auto max-w-[65ch] space-y-4" aria-label="Daily challenges">
           <nav className="flex items-center justify-between gap-3" aria-label="Challenge navigation">
-            <button type="button" disabled={activeIndex <= 0 || busyId !== null}
-              className="rounded-lg border px-3 py-2 text-sm disabled:opacity-40"
-              onClick={() => setPosition(data.tasks[activeIndex - 1].position)}>Previous</button>
+            <Button variant="secondary" size="sm" disabled={activeIndex <= 0 || busyId !== null}
+              onClick={() => setPosition(data.tasks[activeIndex - 1].position)}>Previous</Button>
             <span className="text-sm font-medium text-slate-700" aria-live="polite">
               Q{activeTask.position + 1} of {data.tasks.length}
             </span>
-            <button type="button" disabled={activeIndex >= data.tasks.length - 1 || busyId !== null}
-              className="rounded-lg border px-3 py-2 text-sm disabled:opacity-40"
-              onClick={() => setPosition(data.tasks[activeIndex + 1].position)}>Next</button>
+            <Button variant="secondary" size="sm" disabled={activeIndex >= data.tasks.length - 1 || busyId !== null}
+              onClick={() => setPosition(data.tasks[activeIndex + 1].position)}>Next</Button>
           </nav>
           {((task: DailyTask) => {
             const solved = task.solved;
@@ -290,15 +275,10 @@ export default function CandidateTasks() {
             const noteChanged = (notes[task.id] ?? "") !== (savedNotes[task.id] ?? "");
 
             return (
-              <article
-                key={task.id}
-                className={`rounded-2xl border bg-white p-6 ${
-                  solved ? "border-emerald-200" : "border-slate-200"
-                }`}
-              >
+              <Card key={task.id} className={solved ? "border-emerald-200" : undefined}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">
                       {task.position + 1}. {task.skillName}
                     </p>
                     <h2 className="mt-1 text-lg font-semibold text-slate-900">{task.title}</h2>
@@ -312,23 +292,23 @@ export default function CandidateTasks() {
                   >
                     {DIFFICULTY_LABELS[task.difficulty]}
                   </span>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-medium text-indigo-800">
+                  <Badge tone={task.selfReview ? "neutral" : "accent"} className="items-center gap-1 tabular-nums">
                     <Trophy className="h-3.5 w-3.5" aria-hidden />
                     {task.selfReview ? "Self-review · no points" : `${task.points} pts`}
                     {solved ? ` · earned ${task.earnedPoints}` : ""}
-                  </span>
+                  </Badge>
                 </div>
 
                 {task.steps.length === 0 && (
                   <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-slate-700">{task.scenario}</p>
                 )}
 
-                <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
-                  <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-700">
+                <div className="mt-4 rounded-control bg-brand-50 p-4">
+                  <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-brand-700">
                     <Lightbulb className="h-3.5 w-3.5" aria-hidden />
                     Your challenge
                   </p>
-                  <p className="mt-2 text-sm font-medium leading-relaxed text-slate-800">
+                  <p className="mt-2 text-base font-medium leading-relaxed text-slate-900">
                     {task.question}
                   </p>
 
@@ -341,7 +321,7 @@ export default function CandidateTasks() {
                     </p>
                   ) : (
                     <form
-                      className="mt-3 flex flex-col gap-2 sm:flex-row"
+                      className="mt-3 flex flex-col gap-3"
                       onSubmit={(event) => {
                         event.preventDefault();
                         setPosition(task.position);
@@ -351,7 +331,7 @@ export default function CandidateTasks() {
                       <label htmlFor={`answer-${task.id}`} className="sr-only">
                         Your answer
                       </label>
-                      <textarea
+                      <Textarea
                         rows={task.selfReview ? 4 : 1}
                         id={`answer-${task.id}`}
                         value={answers[task.id] ?? ""}
@@ -361,52 +341,34 @@ export default function CandidateTasks() {
                         placeholder={task.selfReview ? "A short answer is enough. Use details from the brief." : "Type your answer"}
                         maxLength={500}
                         autoComplete="off"
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none"
+
                       />
-                      <button
-                        type="submit"
+                      <Button
+                        type="submit" loading={busyId === task.id} leadingIcon={<Send className="size-4" />}
                         disabled={busyId === task.id || !(answers[task.id] ?? "").trim()}
-                        className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                        className="self-start"
                       >
-                        <Send className="h-4 w-4" aria-hidden />
                         {busyId === task.id ? "Submitting…" : task.selfReview ? "Save and see criteria" : "Submit answer"}
-                      </button>
+                      </Button>
                     </form>
                   )}
 
                   {task.selfReview && result ? (
-                    <div className="mt-3 rounded-lg border border-indigo-200 bg-white p-3 text-sm text-slate-800">
-                      <p className="font-semibold">Review criteria</p>
+                    <Alert tone="info" heading="Review criteria" className="mt-3" role="status">
                       <p className="mt-1">{result.explanation}</p>
-                      <p className="mt-2 text-slate-600">Compare these criteria with your output. This submission is not graded.</p>
-                    </div>
+                      <p className="mt-2">Compare these criteria with your output. This submission is not graded.</p>
+                    </Alert>
                   ) : result && (
-                    <div
-                      className={`mt-3 rounded-lg border p-3 text-sm ${
-                        result.correct
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                          : "border-rose-200 bg-rose-50 text-rose-800"
-                      }`}
-                    >
-                      <p className="flex items-center gap-1.5 font-medium">
-                        {result.correct ? (
-                          <CheckCircle2 className="h-4 w-4" aria-hidden />
-                        ) : (
-                          <XCircle className="h-4 w-4" aria-hidden />
-                        )}
-                        {result.correct
-                          ? result.alreadySolved
-                            ? "Correct — already solved, no extra points."
-                            : `Correct — +${result.awarded} points.`
-                          : `Not correct yet. Attempt${result.attempts === 1 ? "" : "s"}: ${result.attempts}. A correct retry earns half points.`}
-                      </p>
+                    <Alert tone={result.correct ? "success" : "error"} role={result.correct ? "status" : undefined} className="mt-3" heading={result.correct
+                      ? result.alreadySolved ? "Correct — already solved, no extra points." : `Correct — +${result.awarded} points.`
+                      : `Not correct yet. Attempt${result.attempts === 1 ? "" : "s"}: ${result.attempts}. A correct retry earns half points.`}>
                       {result.explanation && <p className="mt-1.5">{result.explanation}</p>}
                       {result.expectedAnswer && (
                         <p className="mt-1.5">
                           Expected answer: <strong>{result.expectedAnswer}</strong>
                         </p>
                       )}
-                    </div>
+                    </Alert>
                   )}
                 </div>
 
@@ -415,26 +377,24 @@ export default function CandidateTasks() {
                     <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                       One line on what you learned (optional)
                     </span>
-                    <textarea
+                    <Textarea
                       rows={2}
                       value={notes[task.id] ?? ""}
                       onChange={(event) =>
                         setNotes((prev) => ({ ...prev, [task.id]: event.target.value }))
                       }
                       placeholder="What would you do differently next time?"
-                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none"
+                      className="mt-1"
                     />
                   </label>
                   <div className="mt-2 flex flex-wrap items-center gap-3">
-                    <button
-                      type="button"
+                    <Button
+                      variant="secondary" size="sm" loading={savingNoteId === task.id} leadingIcon={<Save className="size-4" /> }
                       onClick={() => void saveNote(task.id)}
                       disabled={!noteChanged || savingNoteId === task.id}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                     >
-                      <Save className="h-4 w-4" aria-hidden />
                       {savingNoteId === task.id ? "Saving…" : "Save note"}
-                    </button>
+                    </Button>
                     {solved && task.completedAt && (
                       <span className="text-xs text-slate-500">
                         Solved at{" "}
@@ -452,7 +412,7 @@ export default function CandidateTasks() {
                     </Link>
                   </div>
                 </div>
-              </article>
+              </Card>
             );
           })(activeTask)}
         </section>
