@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "db:check-signin": "tsx prisma/checkSignIn.ts"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
