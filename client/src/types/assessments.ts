@@ -368,6 +368,33 @@ export type SubmissionDetail = {
   tasks: SubmissionTask[];
 };
 
+/** One task's activity signals; counts and times only, never answer or pasted text. */
+export type TaskActivitySummary = {
+  taskId: string;
+  position: number;
+  title: string;
+  firstOpenedAt: string | null;
+  lastSavedAt: string | null;
+  saveCount: number;
+  pasteCount: number;
+  pastedChars: number;
+  focusLostCount: number;
+  /** Seconds from the first open to the last save; null when one of them never happened. */
+  secondsFromOpenToLastSave: number | null;
+};
+
+/** `GET /recruiter/attempts/:attemptId/activity` — signals to look into, not a verdict. */
+export type SubmissionActivity = {
+  eventCount: number;
+  tasks: TaskActivitySummary[];
+  overall: {
+    totalSpanHours: number;
+    longestGapHours: number;
+    /** Share of save-or-paste signals that were pastes, as a whole percentage. */
+    pasteShare: number;
+  };
+};
+
 /** One candidate's per-skill marks inside a side-by-side comparison. */
 export type ComparisonSkill = {
   skillId: string;

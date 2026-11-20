@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { formatZodIssues } from "../auth/schemas";
+import { summariseActivity } from "../assessments/attemptActivity";
 import { buildFollowUpQuestions } from "../assessments/followUps";
 import { prisma } from "../db";
 import { currentUser, requireAuth, requireRole } from "../middleware/auth";
@@ -558,6 +559,42 @@ recruiterAttemptsRouter.get(
       return;
     }
     res.json(serializeSubmission(attempt));
+  }),
+);
+
+// The activity signals of one submitted attempt, summarised. Only counts, times and pasted
+// lengths leave here: no raw metadata, no event rows and never an answer.
+recruiterAttemptsRouter.get(
+  "/:attemptId/activity",
+  asyncHandler(async (req, res) => {
+    const attempt = await prisma.assessmentAttempt.findFirst({
+      where: {
+        id: routeParam(req.params.attemptId),
+        status: "SUBMITTED",
+        version: { assessment: { ownerId: currentUser(res).id } },
+      },
+      select: {
+        id: true,
+        events: {
+          orderBy: { occurredAt: "asc" },
+          select: { type: true, taskId: true, occurredAt: true, metadata: true },
+        },
+        version: {
+          select: {
+            tasks: {
+              orderBy: { position: "asc" },
+              select: { id: true, position: true, title: true },
+            },
+          },
+        },
+      },
+    });
+    if (!attempt) {
+      res.status(404).json({ error: "Submitted attempt not found" });
+      return;
+    }
+
+    res.json(summariseActivity(attempt.events, attempt.version.tasks));
   }),
 );
 

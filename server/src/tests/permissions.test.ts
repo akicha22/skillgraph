@@ -571,6 +571,94 @@ describe("interview follow-ups", () => {
   });
 });
 
+describe("attempt activity", () => {
+  const ANSWER_TEXT = "Confidential answer text for the activity test.";
+
+  async function seedActivity() {
+    const task = await prisma.assessmentTask.findFirst({
+      where: { versionId: fixture.versionA },
+      select: { id: true },
+    });
+    assert.ok(task, "the fixture assessment needs a task");
+    await prisma.attemptEvent.createMany({
+      data: [
+        { attemptId: fixture.attemptA, taskId: task.id, type: "TASK_OPENED", occurredAt: new Date("2026-01-02T09:00:00Z") },
+        {
+          attemptId: fixture.attemptA,
+          taskId: task.id,
+          type: "PASTE",
+          occurredAt: new Date("2026-01-02T09:02:00Z"),
+          metadata: JSON.stringify({ length: 40 }),
+        },
+        {
+          attemptId: fixture.attemptA,
+          taskId: task.id,
+          type: "ANSWER_SAVED",
+          occurredAt: new Date("2026-01-02T09:05:00Z"),
+          metadata: JSON.stringify({ length: 100 }),
+        },
+        { attemptId: fixture.attemptA, taskId: null, type: "FOCUS_LOST", occurredAt: new Date("2026-01-02T09:06:00Z") },
+        { attemptId: fixture.attemptA, taskId: task.id, type: "ANSWER_SAVED", occurredAt: new Date("2026-01-02T09:10:00Z") },
+        { attemptId: fixture.attemptA, taskId: null, type: "SUBMITTED", occurredAt: new Date("2026-01-02T09:12:00Z") },
+      ],
+    });
+    await prisma.assessmentResponse.create({
+      data: { attemptId: fixture.attemptA, taskId: task.id, answer: ANSWER_TEXT },
+    });
+  }
+
+  it("hides another recruiter's attempt activity behind 404", async () => {
+    const res = await get(
+      `/api/recruiter/attempts/${fixture.attemptB}/activity`,
+      fixture.recruiterACookie,
+    );
+    assert.equal(res.status, 404);
+    assert.match(errorOf(res.body), /not found/i);
+  });
+
+  it("stops a candidate from reading attempt activity", async () => {
+    const res = await get(
+      `/api/recruiter/attempts/${fixture.attemptA}/activity`,
+      fixture.candidateACookie,
+    );
+    assert.equal(res.status, 403);
+  });
+
+  it("gives the owner the summary without raw metadata or answers", async () => {
+    await seedActivity();
+    const res = await get(
+      `/api/recruiter/attempts/${fixture.attemptA}/activity`,
+      fixture.recruiterACookie,
+    );
+    assert.equal(res.status, 200);
+
+    const body = res.body as {
+      eventCount: number;
+      tasks: {
+        saveCount: number;
+        pasteCount: number;
+        pastedChars: number;
+        firstOpenedAt: string | null;
+        secondsFromOpenToLastSave: number | null;
+      }[];
+      overall: { totalSpanHours: number; longestGapHours: number; pasteShare: number };
+    };
+    assert.equal(body.eventCount, 6);
+    assert.equal(body.tasks.length, 1);
+    assert.equal(body.tasks[0].saveCount, 2);
+    assert.equal(body.tasks[0].pasteCount, 1);
+    assert.equal(body.tasks[0].pastedChars, 40);
+    assert.equal(body.tasks[0].secondsFromOpenToLastSave, 600);
+    assert.equal(body.overall.pasteShare, 33);
+
+    const json = JSON.stringify(res.body);
+    for (const forbidden of ["metadata", "occurredAt", "answerKey", "privateGuidance", "4242"]) {
+      assert.equal(json.includes(forbidden), false, `${forbidden} must not be in the activity summary`);
+    }
+    assert.equal(json.includes(ANSWER_TEXT), false, "an answer must never reach the activity view");
+  });
+});
+
 describe("candidate consent", () => {
   it("blocks a new attempt until consent and still resumes an existing one", async () => {
     const blocked = await post("/api/candidate/attempts", fixture.candidateCCookie, {

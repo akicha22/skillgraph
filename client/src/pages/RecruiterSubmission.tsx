@@ -7,6 +7,7 @@ const SkillChart = lazy(() => import("../components/SkillChart"));
 import {
   addShortlistEntry,
   getSubmission,
+  getSubmissionActivity,
   listShortlists,
   saveSubmissionScores,
 } from "../services/assessments";
@@ -17,8 +18,55 @@ import {
   METHOD_LABELS,
   TASK_TYPE_LABELS,
   type ShortlistSummary,
+  type SubmissionActivity,
   type SubmissionDetail,
 } from "../types/assessments";
+
+// Like SkillChart, the chart library is only needed on this page, so it loads as its own chunk
+// instead of joining the main bundle.
+const ActivityChart = lazy(() =>
+  import("recharts").then((recharts) => {
+    function ActivityChart({ rows }: { rows: { name: string; saves: number }[] }) {
+      const maxSaves = Math.max(1, ...rows.map((row) => row.saves));
+      return (
+        <recharts.ResponsiveContainer width="100%" height="100%">
+          <recharts.BarChart data={rows} margin={{ top: 8, right: 8, bottom: 8, left: -16 }}>
+            <recharts.CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+            <recharts.XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} />
+            <recharts.YAxis
+              domain={[0, maxSaves]}
+              allowDecimals={false}
+              tick={{ fontSize: 11 }}
+            />
+            <recharts.Tooltip />
+            <recharts.Bar
+              dataKey="saves"
+              name="Saves"
+              fill="#4f46e5"
+              radius={[4, 4, 0, 0]}
+              maxBarSize={48}
+            />
+          </recharts.BarChart>
+        </recharts.ResponsiveContainer>
+      );
+    }
+    return { default: ActivityChart };
+  }),
+);
+
+/** Activity times are shown in the recruiter's local time; a dash means it never happened. */
+function activityTime(value: string | null) {
+  return value ? new Date(value).toLocaleString() : "—";
+}
+
+/** The gap between opening a task and its last save, in a readable form. */
+function activityDuration(seconds: number | null) {
+  if (seconds === null) return "—";
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
 
 /** The score boxes start from what is already saved; empty means "not scored yet". */
 function scoreInputsFrom(submission: SubmissionDetail) {
@@ -44,6 +92,8 @@ export default function RecruiterSubmission() {
   const [addingToList, setAddingToList] = useState(false);
   const [shortlistError, setShortlistError] = useState<string | null>(null);
   const [shortlistSaved, setShortlistSaved] = useState<string | null>(null);
+  const [activity, setActivity] = useState<SubmissionActivity | null>(null);
+  const [activityError, setActivityError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,6 +130,23 @@ export default function RecruiterSubmission() {
       })
       .catch(() => {
         /* The submission page still works without the shortlist panel. */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [attemptId]);
+
+  // Activity is a separate read: a failure must not hide the submission or its marks.
+  useEffect(() => {
+    let cancelled = false;
+    getSubmissionActivity(attemptId)
+      .then((loaded) => {
+        if (cancelled) return;
+        setActivity(loaded);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setActivityError(err instanceof Error ? err.message : "Could not load activity.");
       });
     return () => {
       cancelled = true;
@@ -424,6 +491,114 @@ export default function RecruiterSubmission() {
           </div>
         </section>
       )}
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+        <h2 className="text-lg font-semibold text-slate-900">Activity</h2>
+        <p className="mt-1 max-w-3xl text-sm text-slate-600">
+          Recorded while the candidate was working: when each task was opened, how often it was
+          saved, pastes and the times they left the tab. Only counts and times are stored — never
+          the answer or the pasted text.
+        </p>
+        <p className="mt-2 max-w-3xl rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
+          These are signals, not proof; paste or tab-switching is a reason to ask a follow-up
+          question, not a verdict.
+        </p>
+
+        {activityError ? (
+          <p className="mt-3 text-sm text-rose-700">{activityError}</p>
+        ) : activity === null ? (
+          <p className="mt-3 text-sm text-slate-600">Loading activity…</p>
+        ) : activity.eventCount === 0 ? (
+          <p className="mt-3 text-sm text-slate-600">No activity recorded.</p>
+        ) : (
+          <>
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+              <span className="rounded-full bg-slate-100 px-2.5 py-0.5">
+                {activity.eventCount} signals
+              </span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-0.5">
+                Span {activity.overall.totalSpanHours.toFixed(1)} h
+              </span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-0.5">
+                Longest gap {activity.overall.longestGapHours.toFixed(1)} h
+              </span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-0.5">
+                Paste share {activity.overall.pasteShare}%
+              </span>
+            </div>
+
+            <table className="mt-4 w-full text-left text-sm">
+              <thead className="text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th scope="col" className="pb-1">
+                    Task
+                  </th>
+                  <th scope="col" className="pb-1">
+                    First opened
+                  </th>
+                  <th scope="col" className="pb-1">
+                    Last saved
+                  </th>
+                  <th scope="col" className="pb-1 text-right">
+                    Saves
+                  </th>
+                  <th scope="col" className="pb-1 text-right">
+                    Pastes
+                  </th>
+                  <th scope="col" className="pb-1 text-right">
+                    Tab left
+                  </th>
+                  <th scope="col" className="pb-1 text-right">
+                    Open → last save
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {activity.tasks.map((task) => (
+                  <tr key={task.taskId}>
+                    <td className="py-2 pr-3 font-medium text-slate-800">
+                      {task.position + 1}. {task.title}
+                    </td>
+                    <td className="py-2 pr-3 text-xs text-slate-600">
+                      {activityTime(task.firstOpenedAt)}
+                    </td>
+                    <td className="py-2 pr-3 text-xs text-slate-600">
+                      {activityTime(task.lastSavedAt)}
+                    </td>
+                    <td className="py-2 pr-3 text-right text-slate-700">{task.saveCount}</td>
+                    <td className="py-2 pr-3 text-right text-slate-700">
+                      {task.pasteCount}
+                      {task.pastedChars > 0 ? (
+                        <span className="text-xs text-slate-500"> · {task.pastedChars} chars</span>
+                      ) : null}
+                    </td>
+                    <td className="py-2 pr-3 text-right text-slate-700">{task.focusLostCount}</td>
+                    <td className="py-2 text-right text-slate-700">
+                      {activityDuration(task.secondsFromOpenToLastSave)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div className="mt-4">
+              <p className="text-xs uppercase tracking-wide text-slate-500">
+                Saves per task
+              </p>
+              <div className="mt-2 h-56 w-full">
+                <Suspense fallback={<div className="h-56" />}>
+                  <ActivityChart
+                    rows={activity.tasks.map((task) => ({
+                      name: `#${task.position + 1}`,
+                      saves: task.saveCount,
+                    }))}
+                  />
+                </Suspense>
+              </div>
+            </div>
+          </>
+        )}
+      </section>
 
       {submission.followUpQuestions.length > 0 && (
         <section className="rounded-2xl border border-slate-200 bg-white p-6">

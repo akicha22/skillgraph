@@ -31,6 +31,7 @@ import type {
   RecruiterPostInput,
   ShortlistDetail,
   ShortlistSummary,
+  SubmissionActivity,
   SubmissionDetail,
   SubmissionList,
   VersionList,
@@ -119,6 +120,11 @@ export function saveComparisonWeights(
   weights: { skillId: string; weight: number }[],
 ) {
   return api.put<ComparisonWeights>("/recruiter/attempts/compare/weights", { versionId, weights });
+}
+
+/** Activity signals recorded while the candidate worked, summarised per task. */
+export function getSubmissionActivity(attemptId: string) {
+  return api.get<SubmissionActivity>(`/recruiter/attempts/${attemptId}/activity`);
 }
 
 /** Saves marks per criterion and returns the submission with its new total. */
