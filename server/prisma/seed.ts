@@ -4,7 +4,7 @@ import "../src/env";
 import { prisma } from "../src/db";
 import { hashPassword } from "../src/auth/password";
 import { seedSkills } from "./seedSkills";
-import { seedDemoAssessment, seedDemoPosts } from "./seedDemo";
+import { seedDemoAssessment, seedDemoPosts, seedDemoPractice } from "./seedDemo";
 
 const DEMO_PASSWORD = "Demo@12345";
 
@@ -51,9 +51,11 @@ async function main() {
   const passwordHash = await hashPassword(DEMO_PASSWORD);
 
   for (const u of demoUsers) {
+    const existing = await prisma.user.findUnique({ where: { email: u.email }, select: { isDemo: true } });
+    if (existing && !existing.isDemo) throw new Error(`Refusing to change non-demo account ${u.email}`);
     await prisma.user.upsert({
       where: { email: u.email },
-      update: { ...u, passwordHash, isDemo: true },
+      update: {},
       create: { ...u, passwordHash, isDemo: true },
     });
   }
@@ -67,8 +69,11 @@ async function main() {
   console.log(
     demo.created
       ? `Demo assessment ready and published: ${demo.assessmentId}`
-      : "Demo assessment already present — skipped.",
+      : demo.versionId ? "Existing demo assessment reused; missing sample attempts filled in." : "No publishable demo version found.",
   );
+
+  await seedDemoPractice();
+  console.log("Demo practice and leaderboard data ready.");
 
   const posts = await seedDemoPosts();
   console.log(

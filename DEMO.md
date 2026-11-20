@@ -6,7 +6,7 @@ wording, and every screen says so.
 
 ## What the seed puts in place
 
-`npm run db:seed -w server` (idempotent — running it again skips the demo assessment) creates the
+`npm run db:seed -w server` (idempotent — running it again reuses the demo assessment) creates the
 rows below. Run it with the same `DATABASE_URL` your API uses, otherwise it writes to a different
 file than the one being served:
 
@@ -17,7 +17,9 @@ file than the one being served:
 | Assessment | "Operations Analyst Assessment" for Northline Trading, **published**, 3 tasks, 100 marks, weights 40/30/30 |
 | Submission A | Arjun Shetty (`candidate1`) — submitted, **fully marked**, `reviewedAt` set |
 | Submission B | Meera Kulkarni (`candidate2`) — submitted, **not marked**, so marking can be demonstrated live |
-| Shortlist | "Operations analyst - shortlist" holding Arjun, with a private note |
+| In progress | Rohan Fernandes (`candidate3`) — started, with one saved answer to resume |
+| Daily practice and leaderboard | The three demo candidates have selected skills and sample correct submissions, with points calculated by the normal practice rules. Existing opt-outs are preserved. |
+| Shortlist | "Operations analyst - shortlist" holding Arjun and Meera, with private notes |
 | Requirements posts | Two open roles (operations analyst in Bengaluru, remote data analyst) with skills, experience and work type, shown under **Opportunities**; close one from the recruiter posts page and it leaves the candidate feed without being deleted |
 | Candidate profiles | Demo candidates have a headline, city, years of experience and a short about text, so the profile page is filled in |
 
@@ -136,6 +138,6 @@ and remove all happen from that page, separately from assessments.
 
 ## Resetting
 
-The seed skips the demo assessment when it already exists. To start from an empty database, point
+The seed reuses the demo assessment when it already exists and fills in missing sample attempts. To start from an empty database, point
 `DATABASE_URL` at a new file, run `npx prisma migrate deploy`, then the seed again. There is no
 delete-demo-data command, so nothing in the repo can remove data you wanted to keep.
