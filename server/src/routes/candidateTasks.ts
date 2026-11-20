@@ -11,8 +11,8 @@ import { awardPoints } from "../tasks/scoring";
 /**
  * Daily practice tasks for a candidate.
  *
- * These are preparation, not evaluation: no marks, no rubric, no attempt record and nothing a
- * recruiter can read. A set of ten drills is generated from the candidate's own skills the first
+ * These are private practice, not recruiter assessments. Ten drills are generated from the
+ * candidate's own skills the first
  * time they open the page on a given day, then stored so it stays identical for that day.
  */
 export const candidateTasksRouter = Router();
@@ -38,7 +38,7 @@ function parseAnswerKey(value: string): AnswerKey {
         ? record.accepted.filter((row): row is string => typeof row === "string")
         : [];
       return {
-        type: record.type === "SHORT_TEXT" ? "SHORT_TEXT" : "NUMBER",
+        type: record.type === "SHORT_TEXT" || record.type === "SELF_REVIEW" ? record.type : "NUMBER",
         accepted,
         explanation: typeof record.explanation === "string" ? record.explanation : "",
       };
@@ -71,8 +71,8 @@ function serializeTask(task: {
   skill: { name: string };
 }) {
   const key = parseAnswerKey(task.answerKey);
-  // The expected answer and explanation unlock only after a submission, never before.
-  const revealed = task.attempts > 0;
+  // Review criteria unlock on submission; objective keys unlock only on a correct answer.
+  const revealed = task.solved || (key.type === "SELF_REVIEW" && task.attempts > 0);
 
   return {
     id: task.id,
@@ -84,6 +84,7 @@ function serializeTask(task: {
     estimateMinutes: task.estimateMinutes,
     difficulty: task.difficulty,
     question: task.question,
+    selfReview: key.type === "SELF_REVIEW",
     points: task.points,
     earnedPoints: task.earnedPoints,
     attempts: task.attempts,
@@ -114,7 +115,7 @@ async function tasksForDay(candidateId: string, day: string) {
   return prisma.dailyTask.findMany({
     where: { candidateId, day },
     orderBy: { position: "asc" },
-    include: { skill: { select: { name: true } } },
+    include: { skill: { select: { id: true, slug: true, name: true } } },
   });
 }
 
@@ -180,59 +181,27 @@ candidateTasksRouter.get(
       }
     }
 
-    // Rows created before the graded-question fields existed have no question. A repeated question
-    // can also survive from an older generator. Both are repaired from the current plan, but never
-    // on a drill the candidate has already attempted.
-    const repeatedQuestions = new Set(
-      tasks
-        .map((task) => task.question)
-        .filter((question, index, all) => question !== "" && all.indexOf(question) !== index),
-    );
-    if (
-      tasks.length > 0 &&
-      (tasks.some((task) => !task.question) || repeatedQuestions.size > 0)
-    ) {
-      const skills = await prisma.candidateSkill.findMany({
-        where: { userId: candidateId },
-        orderBy: { createdAt: "asc" },
-        select: { skill: { select: { id: true, slug: true, name: true } } },
-      });
-      const plans = buildDailyTasks({
-        candidateId,
-        dateKey: today,
-        skills: skills.map((row) => row.skill),
-      });
-      const updates = tasks.flatMap((task) => {
-        const plan = plans.find((row) => row.position === task.position);
-        if (!plan) return [];
-        const missing = !task.question;
-        const repeated = repeatedQuestions.has(task.question);
-        if (!missing && !repeated) return [];
-        if (!missing && (task.solved || task.attempts > 0)) return [];
-        return [
-          prisma.dailyTask.update({
-            where: { id: task.id },
-            data: {
-              steps: JSON.stringify(plan.steps),
-              difficulty: plan.difficulty,
-              question: plan.question,
-              points: plan.points,
-              // Tasks completed before grading existed cannot satisfy the new rule.
-              status: "PENDING",
-              completedAt: null,
-              answerKey: JSON.stringify({
-                type: plan.questionType,
-                accepted: plan.acceptedAnswers,
-                explanation: plan.explanation,
-              }),
-            },
-          }),
-        ];
-      });
-      if (updates.length > 0) {
-        await prisma.$transaction(updates);
-        tasks = await tasksForDay(candidateId, today);
-      }
+    // Repair only old, unanswered rows without a question. Existing published sets and scores
+    // otherwise stay unchanged; newly generated days use the curated bank.
+    if (tasks.some((task) => !task.question && task.status === "PENDING" && task.attempts === 0)) {
+      const skills = [...new Map(tasks.map((task) => [task.skillId, task.skill])).values()];
+      const plans = buildDailyTasks({ candidateId, dateKey: today, skills });
+      await prisma.$transaction(tasks.flatMap((task) => {
+        const plan = plans[task.position];
+        if (!plan || task.question || task.status !== "PENDING" || task.attempts > 0) return [];
+        return [prisma.dailyTask.updateMany({
+          where: { id: task.id, question: "", status: "PENDING", attempts: 0 },
+          data: {
+            skillId: plan.skillId, family: plan.family, title: plan.title, scenario: plan.scenario,
+            steps: "[]", estimateMinutes: plan.minutes, difficulty: plan.difficulty,
+            question: plan.question, points: plan.points,
+            answerKey: JSON.stringify({
+              type: plan.questionType, accepted: plan.acceptedAnswers, explanation: plan.explanation,
+            }),
+          },
+        })];
+      }));
+      tasks = await tasksForDay(candidateId, today);
     }
 
     const since = shiftDayKey(today, -6);
@@ -259,7 +228,7 @@ candidateTasksRouter.get(
       return { day, ...entry };
     });
 
-    const doneToday = tasks.filter((task) => task.solved).length;
+    const doneToday = tasks.filter((task) => task.status === "DONE").length;
     const earned = await prisma.dailyTask.aggregate({
       where: { candidateId, solved: true },
       _sum: { earnedPoints: true },
@@ -296,9 +265,7 @@ const answerSchema = z
   })
   .strict();
 
-// Grading happens here, on the server, against the stored private key. A task is only completed
-// by a correct answer: full points on the first attempt, half (rounded down) after any wrong
-// attempt, and nothing for a wrong answer. Re-submitting a solved task never pays again.
+// Checkable answers earn points; practical submissions unlock criteria but are not graded.
 candidateTasksRouter.post(
   "/:taskId/answer",
   asyncHandler(async (req, res) => {
@@ -321,11 +288,11 @@ candidateTasksRouter.post(
 
     const key = parseAnswerKey(task.answerKey);
 
-    if (task.solved) {
+    if (task.status === "DONE") {
       res.json({
         task: serializeTask(task),
         feedback: {
-          correct: true,
+          correct: task.solved,
           awarded: 0,
           attempts: task.attempts,
           explanation: key.explanation,
@@ -337,21 +304,29 @@ candidateTasksRouter.post(
     }
 
     const submitted = parsed.data.answer;
+    const selfReview = key.type === "SELF_REVIEW";
     const correct = gradeDailyAnswer(key.type, key.accepted, submitted);
     const awarded = correct ? awardPoints(task.points, task.attempts) : 0;
 
-    const updated = await prisma.dailyTask.update({
-      where: { id: task.id },
+    const write = await prisma.dailyTask.updateMany({
+      where: { id: task.id, status: "PENDING", attempts: task.attempts },
       data: {
         answer: submitted,
         attempts: { increment: 1 },
-        result: correct ? "CORRECT" : "INCORRECT",
+        result: selfReview ? null : correct ? "CORRECT" : "INCORRECT",
         solved: correct,
         earnedPoints: awarded,
-        status: correct ? "DONE" : "PENDING",
-        completedAt: correct ? new Date() : null,
+        status: correct || selfReview ? "DONE" : "PENDING",
+        completedAt: correct || selfReview ? new Date() : null,
       },
-      include: { skill: { select: { name: true } } },
+    });
+
+    if (write.count === 0) {
+      res.status(409).json({ error: "This task changed in another tab. Refresh before trying again." });
+      return;
+    }
+    const updated = await prisma.dailyTask.findUniqueOrThrow({
+      where: { id: task.id }, include: { skill: { select: { name: true } } },
     });
 
     res.json({
@@ -360,8 +335,8 @@ candidateTasksRouter.post(
         correct,
         awarded,
         attempts: updated.attempts,
-        explanation: key.explanation,
-        expectedAnswer: key.accepted[0] ?? null,
+        explanation: correct || selfReview ? key.explanation : "Recheck the details and the requested answer format.",
+        expectedAnswer: correct ? key.accepted[0] ?? null : null,
         alreadySolved: false,
       },
     });
