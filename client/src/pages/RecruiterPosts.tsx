@@ -1,6 +1,10 @@
+import { Alert, Badge, Card } from "../components/ui/Card";
+import { Button } from "../components/ui/Button";
+import { Input, Select, Textarea } from "../components/ui/Field";
+import { EmptyState, Skeleton } from "../components/ui/Feedback";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, Megaphone, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Megaphone, Pencil, Plus, Trash2, X } from "lucide-react";
 import DashboardLayout from "../layouts/DashboardLayout";
 import LocationInput from "../components/LocationInput";
 import {
@@ -175,10 +179,10 @@ export default function RecruiterPosts() {
 
   return (
     <DashboardLayout>
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+      <Card>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">Requirements posts</h1>
+            <h1 className="text-[1.75rem] font-semibold tracking-tight text-slate-900">Requirements posts</h1>
             <p className="mt-1 max-w-2xl text-slate-600">
               Describe the roles you are hiring for. Candidates see open posts in their opportunities
               section. A post states a requirement; it is not an assessment and carries no marks.
@@ -200,7 +204,7 @@ export default function RecruiterPosts() {
             {(posts?.length ?? 0) - openCount} closed
           </span>
         </div>
-      </section>
+      </Card>
 
       <form
         ref={formRef}
@@ -212,14 +216,14 @@ export default function RecruiterPosts() {
             {editingId ? "Edit post" : "Write a post"}
           </h2>
           {editingId && (
-            <button
+            <Button
               type="button"
               onClick={resetForm}
-              className="inline-flex items-center gap-1 text-sm font-medium text-slate-500 hover:text-slate-800"
+              variant="secondary" size="sm"
             >
               <X className="h-4 w-4" aria-hidden />
               Cancel edit
-            </button>
+            </Button>
           )}
         </div>
 
@@ -228,7 +232,7 @@ export default function RecruiterPosts() {
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Role title <span className="text-rose-600">*</span>
             </span>
-            <input
+            <Input
               value={form.title}
               onChange={(event) => updateField("title", event.target.value)}
               maxLength={100}
@@ -240,7 +244,7 @@ export default function RecruiterPosts() {
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Company <span className="text-rose-600">*</span>
             </span>
-            <input
+            <Input
               value={form.companyName}
               onChange={(event) => updateField("companyName", event.target.value)}
               maxLength={80}
@@ -273,7 +277,7 @@ export default function RecruiterPosts() {
             >
               Work type
             </label>
-            <select
+            <Select
               id="post-employment"
               value={form.employmentType}
               onChange={(event) => updateField("employmentType", event.target.value)}
@@ -285,14 +289,14 @@ export default function RecruiterPosts() {
                   {EMPLOYMENT_TYPE_LABELS[type]}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
 
           <label className="text-sm">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Experience
             </span>
-            <input
+            <Input
               value={form.experience}
               onChange={(event) => updateField("experience", event.target.value)}
               maxLength={60}
@@ -304,7 +308,7 @@ export default function RecruiterPosts() {
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Skills
             </span>
-            <input
+            <Input
               value={form.skills}
               onChange={(event) => updateField("skills", event.target.value)}
               placeholder="Excel, client communication, negotiation"
@@ -317,7 +321,7 @@ export default function RecruiterPosts() {
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               What the role expects <span className="text-rose-600">*</span>
             </span>
-            <textarea
+            <Textarea
               value={form.requirements}
               onChange={(event) => updateField("requirements", event.target.value)}
               rows={5}
@@ -332,26 +336,23 @@ export default function RecruiterPosts() {
         </div>
 
         {formError && (
-          <p className="mt-3 flex items-start gap-2 text-sm text-rose-700">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-            <span>{formError}</span>
-          </p>
+          <Alert tone="error">{formError}</Alert>
         )}
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <button
+          <Button
             type="submit"
             disabled={saving}
-            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            variant="primary" size="sm"
           >
             <Megaphone className="h-4 w-4" aria-hidden />
             {saving ? "Saving…" : editingId ? "Save changes" : "Publish post"}
-          </button>
+          </Button>
           {notice && <span className="text-xs text-emerald-700">{notice}</span>}
         </div>
       </form>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+      <Card>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-slate-900">Your posts</h2>
           <div className="flex gap-1 rounded-lg bg-slate-100 p-1 text-xs">
@@ -361,7 +362,7 @@ export default function RecruiterPosts() {
                 type="button"
                 onClick={() => setFilter(value)}
                 aria-pressed={filter === value}
-                className={`rounded-md px-2.5 py-1 font-medium ${
+                className={`min-h-11 rounded-md px-2.5 py-1 font-medium ${
                   filter === value ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"
                 }`}
               >
@@ -372,35 +373,22 @@ export default function RecruiterPosts() {
         </div>
 
         {loadError ? (
-          <p className="mt-4 flex items-start gap-2 text-sm text-rose-700">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-            <span>{loadError}</span>
-          </p>
+          <Alert tone="error">{loadError}</Alert>
         ) : posts === null ? (
-          <p className="mt-4 text-sm text-slate-600">Loading your posts…</p>
+          <div role="status" className="mt-3"><span className="sr-only">Loading your posts…</span><Skeleton className="h-16" /></div>
         ) : visible.length === 0 ? (
-          <p className="mt-4 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
-            {posts.length === 0
-              ? "No posts yet. Write one above and it appears on every candidate's opportunities page."
-              : `No ${filter.toLowerCase()} posts. Switch the filter to see the others.`}
-          </p>
+          <EmptyState title="No posts to show" text={posts.length === 0
+            ? "No posts yet. Write one above and it appears on every candidate's opportunities page."
+            : `No ${filter.toLowerCase()} posts. Switch the filter to see the others.`} />
         ) : (
-          <ul className="mt-4 space-y-3">
+          <table role="table" aria-label="Requirements posts" className="mt-4 block w-full text-left md:table md:table-fixed">
+            <thead className="hidden md:table-header-group"><tr><th scope="col" className="p-3">Opportunity</th><th scope="col" className="w-28 p-3">Status</th><th scope="col" className="w-40 p-3">Actions</th></tr></thead>
+            <tbody role="rowgroup" className="block space-y-3 md:table-row-group md:space-y-0">
             {visible.map((post) => (
-              <li key={post.id} className="rounded-xl border border-slate-200 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
+              <tr role="row" key={post.id} className="block rounded-card border border-slate-200 bg-white shadow-card md:table-row md:rounded-none md:shadow-none">
+                  <td role="cell" className="block p-4 align-top wrap-break-word md:table-cell">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-semibold text-slate-900">{post.title}</h3>
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                          post.status === "OPEN"
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-slate-100 text-slate-600"
-                        }`}
-                      >
-                        {post.status === "OPEN" ? "Open" : "Closed"}
-                      </span>
                       {post.employmentType && (
                         <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
                           {EMPLOYMENT_TYPE_LABELS[post.employmentType as EmploymentType] ??
@@ -429,44 +417,44 @@ export default function RecruiterPosts() {
                     <p className="mt-2 whitespace-pre-line text-sm text-slate-700">
                       {post.requirements}
                     </p>
-                  </div>
-                  <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    <button
+                  </td>
+                  <td role="cell" className="block px-4 pb-2 align-top md:table-cell md:py-4"><Badge tone={post.status === "OPEN" ? "success" : "neutral"}>{post.status === "OPEN" ? "Open" : "Closed"}</Badge></td>
+                  <td role="cell" className="block px-4 pb-4 align-top md:table-cell md:py-4"><div className="flex flex-wrap gap-2">
+                    <Button
                       type="button"
                       onClick={() => startEdit(post)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      variant="secondary" size="sm"
                     >
                       <Pencil className="h-3.5 w-3.5" aria-hidden />
                       Edit
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
                       onClick={() => void toggleStatus(post)}
                       disabled={busyId === post.id}
-                      className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      variant="secondary" size="sm"
                     >
                       {busyId === post.id
                         ? "Saving…"
                         : post.status === "OPEN"
                           ? "Close post"
                           : "Reopen post"}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
                       onClick={() => void remove(post)}
                       disabled={busyId === post.id}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                      variant="danger" size="sm"
                     >
                       <Trash2 className="h-3.5 w-3.5" aria-hidden />
                       Remove
-                    </button>
-                  </div>
-                </div>
-              </li>
+                    </Button>
+                  </div></td>
+              </tr>
             ))}
-          </ul>
+          </tbody></table>
         )}
-      </section>
+      </Card>
     </DashboardLayout>
   );
 }
