@@ -1,3 +1,8 @@
+import { Button } from "../components/ui/Button";
+import { Alert, Badge, Card } from "../components/ui/Card";
+import { Skeleton, Spinner } from "../components/ui/Feedback";
+import { Textarea } from "../components/ui/Field";
+import { buttonClasses } from "../components/ui/cx";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
@@ -5,6 +10,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Clock,
+  CircleCheck,
   FileText,
   Table2,
 } from "lucide-react";
@@ -357,9 +363,10 @@ export default function CandidateAssessmentPage() {
   if (loading) {
     return (
       <DashboardLayout>
-        <p className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
-          Loading assessment…
-        </p>
+        <Card role="status" className="space-y-4">
+          <span className="sr-only">Loading assessment…</span>
+          <Skeleton className="h-8 w-2/3" /><Skeleton className="h-28" />
+        </Card>
       </DashboardLayout>
     );
   }
@@ -367,19 +374,16 @@ export default function CandidateAssessmentPage() {
   if (error || !assessment) {
     return (
       <DashboardLayout>
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6">
-          <p className="flex items-start gap-2 text-sm text-rose-700">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-            <span>{error ?? "Assessment not found."}</span>
-          </p>
+        <Card>
+          <Alert tone="error">{error ?? "Assessment not found."}</Alert>
           <Link
             to="/candidate"
-            className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-rose-700 hover:underline"
+            className={buttonClasses({ variant: "secondary", className: "mt-3" })}
           >
             <ArrowLeft className="h-4 w-4" aria-hidden />
             Back to dashboard
           </Link>
-        </div>
+        </Card>
       </DashboardLayout>
     );
   }
@@ -413,11 +417,30 @@ export default function CandidateAssessmentPage() {
 
   return (
     <DashboardLayout>
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
-        <p className="text-xs uppercase tracking-wide text-slate-500">
-          {assessment.assessment.companyName} · {assessment.assessment.jobTitle}
-        </p>
-        <h1 className="mt-1 text-2xl font-bold text-slate-900">{assessment.title}</h1>
+      <Card className="sticky top-28 z-20 p-3 sm:p-4">
+        <header className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-wide text-slate-500">{assessment.assessment.companyName} · {assessment.assessment.jobTitle}</p>
+            <h1 className="mt-1 text-lg leading-tight font-semibold tracking-tight wrap-break-word sm:text-xl">{assessment.title}</h1>
+          </div>
+          {activeAttempt && (
+            <div role="status" className="shrink-0">
+              {savingTaskId ? (
+                <Badge tone="brand" className="items-center gap-1.5"><Spinner decorative /> Saving answer…</Badge>
+              ) : attemptError ? (
+                <Badge tone="danger" className="items-center gap-1.5"><AlertTriangle aria-hidden="true" className="size-4" /> Attempt action failed</Badge>
+              ) : activeAttempt.status === "SUBMITTED" ? (
+                <Badge tone="success" className="items-center gap-1.5"><CircleCheck aria-hidden="true" className="size-4" /> Submitted</Badge>
+              ) : savedCount > 0 ? (
+                <Badge tone="success" className="items-center gap-1.5 tabular-nums"><CircleCheck aria-hidden="true" className="size-4" /> {savedCount} of {tasks.length} tasks saved</Badge>
+              ) : (
+                <Badge className="items-center gap-1.5"><FileText aria-hidden="true" className="size-4" /> No answers saved yet</Badge>
+              )}
+            </div>
+          )}
+        </header>
+      </Card>
+      <Card>
         <p className="mt-2 text-sm text-slate-600">{assessment.description}</p>
         <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-600">
           <span className="rounded-full bg-slate-100 px-2.5 py-0.5">{tasks.length} tasks</span>
@@ -434,29 +457,25 @@ export default function CandidateAssessmentPage() {
             {assessment.aiPolicy === "NOT_ALLOWED" ? "AI not allowed" : "AI allowed if disclosed"}
           </span>
         </div>
-      </section>
+      </Card>
 
       {attemptLoading ? (
-        <p className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
-          Checking your attempt…
-        </p>
+        <Card role="status" className="space-y-3"><span className="sr-only">Checking your attempt…</span><Skeleton className="h-6 w-1/2" /><Skeleton className="h-20" /></Card>
       ) : !activeAttempt ? (
         <>
           {consentAt === null && !consentDismissed ? (
-            <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-6">
-              <h2 className="text-lg font-semibold text-slate-900">
-                Before you start: what this attempt records
-              </h2>
-              <p className="mt-1 text-sm text-indigo-900">
+            <Card className="border-brand-200">
+              <Alert tone="info" heading="Before you start: what this attempt records">
+              <p className="mt-1 text-sm text-brand-900">
                 To keep the assessment fair, this attempt records:
               </p>
-              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-indigo-900">
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-brand-900">
                 <li>your answers and each saved revision;</li>
                 <li>when you open a task and when an answer is saved;</li>
                 <li>paste events as a size only, never the pasted text;</li>
                 <li>when the tab loses focus.</li>
               </ul>
-              <p className="mt-3 text-sm text-indigo-900">
+              <p className="mt-3 text-sm text-brand-900">
                 Only the recruiter who owns this assessment can see this record. You can delete
                 your account and all of this data at any time from your{" "}
                 <Link to="/candidate/profile" className="font-medium underline">
@@ -464,42 +483,43 @@ export default function CandidateAssessmentPage() {
                 </Link>
                 .
               </p>
+              </Alert>
               <div className="mt-4 flex flex-wrap gap-2">
-                <button
+                <Button
                   onClick={() => void agreeAndStart()}
                   disabled={starting || acceptingConsent}
-                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+                  variant="primary"
                 >
                   {acceptingConsent ? "Starting…" : "I agree and start"}
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={() => setConsentDismissed(true)}
                   disabled={starting || acceptingConsent}
-                  className="rounded-lg border border-indigo-300 bg-white px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
+                  variant="secondary"
                 >
                   Not now
-                </button>
+                </Button>
               </div>
-              {attemptError && <p className="mt-2 text-sm text-rose-700">{attemptError}</p>}
-            </section>
+              {attemptError && <Alert tone="error" className="mt-3">{attemptError}</Alert>}
+            </Card>
           ) : (
-            <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-6">
+            <Card className="border-brand-200">
               <h2 className="text-lg font-semibold text-slate-900">Ready to start?</h2>
-              <p className="mt-1 text-sm text-indigo-900">
+              <p className="mt-1 text-sm text-brand-900">
                 You will see one task at a time and can move between them. Each task has its own
                 answer box, and saved answers are kept if you come back later.
               </p>
-              <button
+              <Button
                 onClick={beginAttempt}
                 disabled={starting || acceptingConsent}
-                className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+                variant="primary" className="mt-3"
               >
                 {starting ? "Starting…" : "Start answering"}
-              </button>
-            </section>
+              </Button>
+            </Card>
           )}
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-6">
+          <Card>
             <h2 className="text-lg font-semibold text-slate-900">Before you start</h2>
             <p className="mt-3 whitespace-pre-line text-sm text-slate-700">
               {assessment.jobContext}
@@ -511,9 +531,9 @@ export default function CandidateAssessmentPage() {
             <p className="mt-1 whitespace-pre-line text-sm text-slate-700">
               {assessment.candidateInstructions}
             </p>
-          </section>
+          </Card>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-6">
+          <Card>
             <h2 className="text-lg font-semibold text-slate-900">What you will be asked</h2>
             <p className="mt-1 text-sm text-slate-600">
               These are the topics. The tasks themselves open when you start, so you are not reading
@@ -542,33 +562,33 @@ export default function CandidateAssessmentPage() {
                 </li>
               ))}
             </ol>
-          </section>
+          </Card>
         </>
       ) : !questionsReady || !activeTask ? (
-        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6">
+        <Card className="border-amber-200">
           <h2 className="text-lg font-semibold text-slate-900">Your attempt is started</h2>
           <p className="mt-1 text-sm text-amber-900">
             The tasks could not be loaded just now. Your saved answers are safe — load the tasks to
             carry on.
           </p>
-          <button
+          <Button
             onClick={() => void reloadQuestions()}
             disabled={reloadingQuestions}
-            className="mt-3 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-60"
+            variant="secondary" className="mt-3"
           >
             {reloadingQuestions ? "Loading…" : "Load the tasks"}
-          </button>
-          {attemptError && <p className="mt-2 text-sm text-rose-700">{attemptError}</p>}
-        </section>
+          </Button>
+          {attemptError && <Alert tone="error" className="mt-3">{attemptError}</Alert>}
+        </Card>
       ) : (
         <>
-          <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5">
+          <Card className={activeAttempt.status === "SUBMITTED" ? "border-emerald-200" : "border-brand-200"}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-base font-semibold text-slate-900">
                   {activeAttempt.status === "IN_PROGRESS" ? "Your attempt" : "Attempt submitted"}
                 </h2>
-                <p className="mt-1 max-w-2xl text-sm text-indigo-900">
+                <p className="mt-1 max-w-2xl text-sm text-brand-900">
                   {activeAttempt.status === "IN_PROGRESS"
                     ? "Saved answers are kept if you come back later; nothing is submitted until you submit."
                     : `Your answers are saved and this attempt was submitted${
@@ -581,48 +601,47 @@ export default function CandidateAssessmentPage() {
                           : " No marks have been given yet; they will appear below once marking starts."
                       }`}
                 </p>
-                <p className="mt-1 text-xs font-medium text-indigo-800">
+                <p className="mt-1 text-xs font-medium text-brand-800">
                   {savedCount} of {tasks.length} tasks saved
                 </p>
               </div>
               {activeAttempt.status === "IN_PROGRESS" &&
                 (confirmingSubmit ? (
-                  <div className="rounded-xl border border-indigo-200 bg-white p-3">
-                    <p className="text-sm text-slate-700">
-                      Submit this attempt? Only saved answers are submitted, and answers cannot be
-                      changed afterwards.
-                    </p>
+                  <Card className="w-full">
+                    <Alert tone="warning" heading="Submit this attempt?">
+                      Only saved answers are submitted, and answers cannot be changed afterwards.
+                    </Alert>
                     <div className="mt-2 flex items-center gap-2">
-                      <button
+                      <Button
                         onClick={() => void submitAttempt()}
                         disabled={submitting}
-                        className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+                        variant="primary"
                       >
                         {submitting ? "Submitting…" : "Submit and lock"}
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         onClick={() => setConfirmingSubmit(false)}
                         disabled={submitting}
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                        variant="secondary"
                       >
                         Cancel
-                      </button>
+                      </Button>
                     </div>
-                  </div>
+                  </Card>
                 ) : (
-                  <button
+                  <Button
                     onClick={() => setConfirmingSubmit(true)}
-                    className="rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+                    variant="secondary"
                   >
                     Submit attempt
-                  </button>
+                  </Button>
                 ))}
             </div>
-            {attemptError && <p className="mt-2 text-sm text-rose-700">{attemptError}</p>}
-          </section>
+            {attemptError && <Alert tone="error" className="mt-3">{attemptError}</Alert>}
+          </Card>
 
           {result && result.scoredCriteria > 0 && (
-            <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6">
+            <Card className="border-emerald-200 bg-emerald-50 tabular-nums">
               <h2 className="text-base font-semibold text-slate-900">Your result</h2>
               <p className="mt-1 text-3xl font-bold text-slate-900">
                 {result.awarded}
@@ -654,11 +673,11 @@ export default function CandidateAssessmentPage() {
               <p className="mt-2 text-xs text-emerald-900">
                 Each task's rubric below shows what was awarded for each criterion.
               </p>
-            </section>
+            </Card>
           )}
 
           {activeAttempt.status === "SUBMITTED" && followUps && followUps.questions.length > 0 && (
-            <section className="rounded-2xl border border-slate-200 bg-white p-6">
+            <Card>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2 className="text-base font-semibold text-slate-900">
                   Interview follow-up questions
@@ -672,14 +691,14 @@ export default function CandidateAssessmentPage() {
                 to guide a live conversation. You can answer them in writing here after submitting —
                 it is optional, and it does not change your marks.
               </p>
-              {followUpError && <p className="mt-2 text-sm text-rose-700">{followUpError}</p>}
+              {followUpError && <Alert tone="error" className="mt-3">{followUpError}</Alert>}
               {followUps.questions.map((question) => (
                 <div key={question.criterionId} className="mt-4 rounded-xl bg-slate-50 p-4">
                   <p className="text-sm font-medium text-slate-900">{question.question}</p>
                   <p className="mt-1 text-xs text-slate-500">
                     {question.taskTitle} · {question.criterion} · {question.reason}
                   </p>
-                  <textarea
+                  <Textarea
                     rows={4}
                     value={followUpDrafts[question.criterionId] ?? ""}
                     onChange={(event) =>
@@ -689,17 +708,18 @@ export default function CandidateAssessmentPage() {
                       }))
                     }
                     placeholder="Answer in a few sentences, if you would like to."
-                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none"
+                    aria-label={question.question}
+                    className="mt-2"
                   />
                   <div className="mt-2 flex items-center gap-3">
-                    <button
+                    <Button
                       type="button"
                       onClick={() => void saveFollowUp(question.criterionId)}
                       disabled={followUpBusyId === question.criterionId}
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                      variant="secondary"
                     >
                       {followUpBusyId === question.criterionId ? "Saving…" : "Save answer"}
-                    </button>
+                    </Button>
                     {question.answer.trim().length > 0 &&
                       (followUpDrafts[question.criterionId] ?? "") === question.answer && (
                         <span className="text-xs text-emerald-700">Saved</span>
@@ -707,12 +727,12 @@ export default function CandidateAssessmentPage() {
                   </div>
                 </div>
               ))}
-            </section>
+            </Card>
           )}
 
           <div className="grid gap-4 lg:grid-cols-[13rem_minmax(0,1fr)]">
-            <nav aria-label="Tasks" className="lg:sticky lg:top-4 lg:self-start">
-              <ol className="flex gap-2 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible lg:pb-0">
+            <nav aria-label="Tasks" className="min-w-0 lg:self-start">
+              <ol className="flex gap-2 overflow-x-auto p-1 lg:flex-col lg:overflow-visible">
                 {tasks.map((task, index) => {
                   const isActive = index === safeIndex;
                   return (
@@ -721,34 +741,34 @@ export default function CandidateAssessmentPage() {
                         type="button"
                         onClick={() => setActiveIndex(index)}
                         aria-current={isActive ? "step" : undefined}
-                        className={`flex w-40 items-center gap-2 rounded-xl border px-3 py-2 text-left lg:w-full ${
+                        className={`flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-full border px-2 py-2 text-left lg:w-full lg:justify-start lg:rounded-control lg:px-3 ${
                           isActive
-                            ? "border-indigo-500 bg-white shadow-sm"
+                            ? "border-brand-500 bg-white shadow-sm"
                             : "border-slate-200 bg-white/70 hover:border-slate-300"
                         }`}
                       >
                         <span
                           className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
                             isActive
-                              ? "bg-indigo-600 text-white"
+                              ? "bg-brand-600 text-white"
                               : "bg-slate-100 text-slate-600"
                           }`}
                         >
                           {index + 1}
                         </span>
-                        <span className="min-w-0">
-                          <span className="block truncate text-xs font-semibold text-slate-900">
+                        <span className="sr-only lg:not-sr-only lg:min-w-0">
+                          <span className="block text-xs font-semibold text-slate-900">
                             Task {index + 1}
                           </span>
-                          <span className="block truncate text-xs text-slate-500">
+                          <span className="block wrap-break-word text-xs text-slate-500">
                             {task.skillName}
                           </span>
                         </span>
                         {savedTaskIds.has(task.id) && (
-                          <span
-                            className="ml-auto h-2 w-2 shrink-0 rounded-full bg-emerald-500"
-                            title="Answer saved"
-                          />
+                          <span className="text-emerald-700 lg:ml-auto">
+                            <CircleCheck aria-hidden="true" className="size-3.5" />
+                            <span className="sr-only">Answer saved</span>
+                          </span>
                         )}
                       </button>
                     </li>
@@ -757,8 +777,8 @@ export default function CandidateAssessmentPage() {
               </ol>
             </nav>
 
-            <article className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
-              <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
+            <Card className="min-w-0 wrap-break-word">
+              <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">
                 Task {safeIndex + 1} of {tasks.length}
               </p>
               <h2 className="mt-1 text-2xl font-bold leading-tight text-slate-900">
@@ -775,7 +795,7 @@ export default function CandidateAssessmentPage() {
                 <span>{activeTask.timeMinutes} min</span>
               </div>
 
-              <p className="mt-5 whitespace-pre-line text-[15px] leading-relaxed text-slate-800">
+              <p className="mt-5 max-w-[65ch] whitespace-pre-line text-base leading-relaxed text-slate-800">
                 {activeTask.prompt}
               </p>
 
@@ -785,7 +805,7 @@ export default function CandidateAssessmentPage() {
                     <Table2 className="h-3.5 w-3.5" aria-hidden />
                     Data for this task
                   </h3>
-                  <div className="mt-2">
+                  <div className="mt-2 max-w-full overflow-x-auto" tabIndex={0} role="region" aria-label="Supporting task data">
                     <DataPreview data={activeTask.publicData} />
                   </div>
                 </div>
@@ -802,7 +822,7 @@ export default function CandidateAssessmentPage() {
                         : ""}
                     </span>
                   </summary>
-                  <div className="border-t border-slate-100 px-4 py-3">
+                  <div className="max-w-full overflow-x-auto border-t border-slate-100 px-4 py-3" tabIndex={0} role="region" aria-label="Scoring criteria">
                     <table className="w-full text-left text-sm">
                       <thead className="text-xs uppercase tracking-wide text-slate-500">
                         <tr>
@@ -863,7 +883,7 @@ export default function CandidateAssessmentPage() {
                   </p>
                 ) : (
                   <>
-                    <textarea
+                    <Textarea
                       id={`answer-${activeTask.id}`}
                       rows={12}
                       value={drafts[activeTask.id] ?? ""}
@@ -882,56 +902,56 @@ export default function CandidateAssessmentPage() {
                         });
                       }}
                       placeholder="Type your answer here"
-                      className="mt-2 w-full rounded-xl border border-slate-300 p-3 text-sm leading-relaxed text-slate-800 focus:border-indigo-500 focus:outline-none"
+                      className="mt-2 min-h-60"
                     />
                     <div className="mt-2 flex flex-wrap items-center gap-3">
                       {activeAttempt.status === "IN_PROGRESS" && (
-                        <button
+                        <Button
                           onClick={() => void saveAnswer(activeTask.id)}
                           disabled={savingTaskId === activeTask.id}
-                          className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+                          variant="primary"
                         >
                           {savingTaskId === activeTask.id ? "Saving…" : "Save answer"}
-                        </button>
+                        </Button>
                       )}
                       {savedTaskId === activeTask.id && (
                         <span className="text-xs text-emerald-700">Saved</span>
                       )}
-                      <span className="ml-auto text-xs text-slate-400">
+                      <span className="ml-auto text-xs text-slate-600">
                         {(drafts[activeTask.id] ?? "").length} characters
                       </span>
                     </div>
-                    <p className="mt-2 text-xs text-slate-500">
+                    <Alert tone="info" className="mt-3">
                       Activity such as paste and tab-switching is recorded for the recruiter.
-                    </p>
+                    </Alert>
                   </>
                 )}
               </div>
 
               <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
-                <button
+                <Button
                   type="button"
                   onClick={() => setActiveIndex(Math.max(0, safeIndex - 1))}
                   disabled={safeIndex === 0}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                  variant="secondary"
                 >
                   <ArrowLeft className="h-4 w-4" aria-hidden />
                   Previous
-                </button>
+                </Button>
                 <span className="text-xs text-slate-500">
                   {safeIndex + 1} / {tasks.length}
                 </span>
-                <button
+                <Button
                   type="button"
                   onClick={() => setActiveIndex(Math.min(tasks.length - 1, safeIndex + 1))}
                   disabled={safeIndex >= tasks.length - 1}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-40"
+                  variant="primary"
                 >
                   Next
                   <ArrowRight className="h-4 w-4" aria-hidden />
-                </button>
+                </Button>
               </div>
-            </article>
+            </Card>
           </div>
         </>
       )}
