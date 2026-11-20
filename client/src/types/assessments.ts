@@ -621,6 +621,7 @@ export type DailyTask = {
   estimateMinutes: number;
   difficulty: "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
   question: string;
+  selfReview: boolean;
   /** Points the task is worth; full on a first-attempt correct answer. */
   points: number;
   /** Points actually earned; 0 until solved. */

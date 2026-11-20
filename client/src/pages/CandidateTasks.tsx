@@ -24,6 +24,8 @@ import type {
   DailyTaskFeedback,
 } from "../types/assessments";
 
+const DIFFICULTY_LABELS = { BEGINNER: "Easy", INTERMEDIATE: "Intermediate", ADVANCED: "Challenging" };
+
 const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 
 const DIFFICULTY_STYLES: Record<DailyTask["difficulty"], string> = {
@@ -41,6 +43,7 @@ export default function CandidateTasks() {
   const [savedNotes, setSavedNotes] = useState<Record<string, string>>({});
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [feedback, setFeedback] = useState<Record<string, DailyTaskFeedback>>({});
+  const [position, setPosition] = useState<number | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [savingNoteId, setSavingNoteId] = useState<string | null>(null);
   // Bumped after a change so the loader below re-reads the streak and points totals.
@@ -93,7 +96,7 @@ export default function CandidateTasks() {
               summary: {
                 ...prev.summary,
                 todayDone: prev.tasks.filter((task) =>
-                  task.id === taskId ? result.task.solved : task.solved,
+                  (task.id === taskId ? result.task.status : task.status) === "DONE",
                 ).length,
                 todayPoints:
                   prev.summary.todayPoints -
@@ -115,11 +118,13 @@ export default function CandidateTasks() {
       );
       setReloadToken((token) => token + 1);
       setNotice(
-        result.feedback.correct
+        result.task.selfReview
+          ? "Output saved. Compare your work with the review criteria below."
+          : result.feedback.correct
           ? result.feedback.alreadySolved
             ? "That task is already solved — no additional points."
             : `Correct! +${result.feedback.awarded} points.`
-          : "Not correct yet. Read the explanation and try again; a correct retry earns half points.",
+          : "Not correct yet. Review the brief and try again; a correct retry earns half points.",
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not submit that answer.");
@@ -155,6 +160,10 @@ export default function CandidateTasks() {
     };
   }
 
+  const activeTask = data?.tasks.find((task) => task.position === position)
+    ?? data?.tasks.find((task) => task.status !== "DONE") ?? data?.tasks[0];
+  const activeIndex = activeTask ? (data?.tasks.indexOf(activeTask) ?? -1) : -1;
+
   const todayLabel = data
     ? new Date(`${data.day}T00:00:00`).toLocaleDateString(undefined, {
         weekday: "long",
@@ -170,9 +179,8 @@ export default function CandidateTasks() {
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Daily tasks</h1>
             <p className="mt-1 max-w-2xl text-slate-600">
-              Ten short drills that start simple and build to application problems. Answer on the
-              page — the server checks your work and awards points once. This is practice, not an
-              assessment.
+              Practise ten workplace challenges, from quick warm-ups to tougher decisions.
+              Checkable answers earn points; practical outputs unlock criteria for reviewing your own work.
             </p>
           </div>
           <div className="flex gap-2">
@@ -263,15 +271,26 @@ export default function CandidateTasks() {
             Choose skills
           </Link>
         </section>
-      ) : (
-        <ul className="space-y-4">
-          {data.tasks.map((task) => {
+      ) : activeTask ? (
+        <section className="space-y-4" aria-label="Daily challenges">
+          <nav className="flex items-center justify-between gap-3" aria-label="Challenge navigation">
+            <button type="button" disabled={activeIndex <= 0 || busyId !== null}
+              className="rounded-lg border px-3 py-2 text-sm disabled:opacity-40"
+              onClick={() => setPosition(data.tasks[activeIndex - 1].position)}>Previous</button>
+            <span className="text-sm font-medium text-slate-700" aria-live="polite">
+              Q{activeTask.position + 1} of {data.tasks.length}
+            </span>
+            <button type="button" disabled={activeIndex >= data.tasks.length - 1 || busyId !== null}
+              className="rounded-lg border px-3 py-2 text-sm disabled:opacity-40"
+              onClick={() => setPosition(data.tasks[activeIndex + 1].position)}>Next</button>
+          </nav>
+          {((task: DailyTask) => {
             const solved = task.solved;
             const result = feedbackFor(task);
             const noteChanged = (notes[task.id] ?? "") !== (savedNotes[task.id] ?? "");
 
             return (
-              <li
+              <article
                 key={task.id}
                 className={`rounded-2xl border bg-white p-6 ${
                   solved ? "border-emerald-200" : "border-slate-200"
@@ -291,45 +310,31 @@ export default function CandidateTasks() {
                   <span
                     className={`rounded-full px-2.5 py-1 text-xs font-medium ${DIFFICULTY_STYLES[task.difficulty]}`}
                   >
-                    {task.difficulty}
+                    {DIFFICULTY_LABELS[task.difficulty]}
                   </span>
                   <span className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-medium text-indigo-800">
                     <Trophy className="h-3.5 w-3.5" aria-hidden />
-                    {task.points} pts
+                    {task.selfReview ? "Self-review · no points" : `${task.points} pts`}
                     {solved ? ` · earned ${task.earnedPoints}` : ""}
                   </span>
                 </div>
 
-                <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-slate-700">
-                  {task.scenario}
-                </p>
-
-                <div className="mt-4 rounded-xl bg-slate-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Work through these
-                  </p>
-                  <ol className="mt-2 space-y-1.5 text-sm text-slate-700">
-                    {task.steps.map((step, index) => (
-                      <li key={step} className="flex gap-2">
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-slate-500">
-                          {index + 1}
-                        </span>
-                        <span>{step}</span>
-                      </li>
-                    ))}
-                  </ol>
-                </div>
+                {task.steps.length === 0 && (
+                  <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-slate-700">{task.scenario}</p>
+                )}
 
                 <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
                   <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-700">
                     <Lightbulb className="h-3.5 w-3.5" aria-hidden />
-                    Your question
+                    Your challenge
                   </p>
                   <p className="mt-2 text-sm font-medium leading-relaxed text-slate-800">
                     {task.question}
                   </p>
 
-                  {solved ? (
+                  {task.selfReview && task.status === "DONE" ? (
+                    <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">Your output: {task.answer}</p>
+                  ) : solved ? (
                     <p className="mt-3 flex items-center gap-2 text-sm text-emerald-700">
                       <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
                       Solved with “{task.answer}” — {task.earnedPoints} of {task.points} points.
@@ -339,19 +344,21 @@ export default function CandidateTasks() {
                       className="mt-3 flex flex-col gap-2 sm:flex-row"
                       onSubmit={(event) => {
                         event.preventDefault();
+                        setPosition(task.position);
                         void submit(task.id);
                       }}
                     >
                       <label htmlFor={`answer-${task.id}`} className="sr-only">
                         Your answer
                       </label>
-                      <input
+                      <textarea
+                        rows={task.selfReview ? 4 : 1}
                         id={`answer-${task.id}`}
                         value={answers[task.id] ?? ""}
                         onChange={(event) =>
                           setAnswers((prev) => ({ ...prev, [task.id]: event.target.value }))
                         }
-                        placeholder="Type your answer"
+                        placeholder={task.selfReview ? "Write your output using the details in the brief" : "Type your answer"}
                         maxLength={500}
                         autoComplete="off"
                         className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none"
@@ -362,12 +369,18 @@ export default function CandidateTasks() {
                         className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
                       >
                         <Send className="h-4 w-4" aria-hidden />
-                        {busyId === task.id ? "Checking…" : "Submit answer"}
+                        {busyId === task.id ? "Submitting…" : task.selfReview ? "Save and see criteria" : "Submit answer"}
                       </button>
                     </form>
                   )}
 
-                  {result && (
+                  {task.selfReview && result ? (
+                    <div className="mt-3 rounded-lg border border-indigo-200 bg-white p-3 text-sm text-slate-800">
+                      <p className="font-semibold">Review criteria</p>
+                      <p className="mt-1">{result.explanation}</p>
+                      <p className="mt-2 text-slate-600">Compare these criteria with your output. This submission is not graded.</p>
+                    </div>
+                  ) : result && (
                     <div
                       className={`mt-3 rounded-lg border p-3 text-sm ${
                         result.correct
@@ -439,11 +452,11 @@ export default function CandidateTasks() {
                     </Link>
                   </div>
                 </div>
-              </li>
+              </article>
             );
-          })}
-        </ul>
-      )}
+          })(activeTask)}
+        </section>
+      ) : null}
     </DashboardLayout>
   );
 }

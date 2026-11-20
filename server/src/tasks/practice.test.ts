@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildDailyTasks, dayKey, shiftDayKey } from "./practice";
+import { BANKS, EXTRA, TIER_RANGE } from "./dailyBank";
 import { gradeDailyAnswer } from "./dailyQuestions";
 import { awardPoints, rankLeaderboard } from "./scoring";
 
@@ -31,7 +32,7 @@ test("a candidate with no skills gets no invented practice", () => {
   );
 });
 
-test("a day's set has three drills, drawn only from the candidate's skills", () => {
+test("a day's set has ten drills, drawn only from the candidate's skills", () => {
   const tasks = buildDailyTasks({
     candidateId: "cand-1",
     dateKey: "2026-11-19",
@@ -47,7 +48,7 @@ test("a day's set has three drills, drawn only from the candidate's skills", () 
   for (const task of tasks) {
     assert.ok(allowed.has(task.skillId));
     assert.ok(task.title.includes(task.skillName));
-    assert.equal(task.steps.length, 3);
+    assert.equal(task.steps.length, 0);
   }
   // With cycling, some skills repeat across 10 positions; verify no unexpected IDs.
   const skillIds = tasks.map((task) => task.skillId);
@@ -57,7 +58,7 @@ test("a day's set has three drills, drawn only from the candidate's skills", () 
   assert(uniqueCount >= 1 && uniqueCount <= tasks.length);
 });
 
-test("fewer than three skills means fewer drills, never duplicates", () => {
+test("small skill sets still receive ten distinct challenges", () => {
   assert.equal(
     buildDailyTasks({ candidateId: "c", dateKey: "2026-11-19", skills: [SKILLS[0]] }).length,
     10,
@@ -108,29 +109,37 @@ test("difficulty climbs from warm-up to application and pays the matching points
       "ADVANCED",
     ],
   );
-  assert.deepEqual(
-    tasks.map((task) => task.points),
-    [5, 5, 5, 10, 10, 10, 10, 15, 15, 15],
-  );
+  const tierPoints = { BEGINNER: 5, INTERMEDIATE: 10, ADVANCED: 15 };
+  for (const task of tasks) {
+    assert.equal(task.points, task.questionType === "SELF_REVIEW" ? 0 : tierPoints[task.difficulty]);
+  }
 });
 
-test("every drill has a checkable question with a private answer key", () => {
-  const tasks = buildDailyTasks({
-    candidateId: "cand-1",
-    dateKey: "2026-11-19",
-    skills: SKILLS,
-  });
+test("the curated banks have unique concepts, single prompts and evaluation criteria", () => {
+  const ids = new Set<string>();
+  const prompts = new Set<string>();
+  for (const bank of [...Object.values(BANKS), ...Object.values(EXTRA)]) {
+    for (const [id, brief, prompt, criteria, answer] of bank) {
+      assert.ok(!ids.has(id), id);
+      assert.ok(!prompts.has(prompt), prompt);
+      ids.add(id);
+      prompts.add(prompt);
+      assert.ok(brief && criteria);
+      assert.match(prompt, /^[^.?!]+[.]$/);
+      if (answer) assert.ok(gradeDailyAnswer("SHORT_TEXT", [answer], answer));
+    }
+  }
+});
 
-  assert.equal(new Set(tasks.map((task) => task.question)).size, tasks.length);
-  for (const task of tasks) {
-    assert.ok(task.question.length > 20);
-    assert.ok(task.acceptedAnswers.length > 0);
-    assert.ok(task.explanation.length > 0);
-    assert.ok(
-      gradeDailyAnswer(task.questionType, task.acceptedAnswers, task.acceptedAnswers[0]),
-      `the stored answer must grade as correct: ${task.question}`,
-    );
-    assert.equal(gradeDailyAnswer(task.questionType, task.acceptedAnswers, "definitely wrong"), false);
+test("dedicated skills select their own tiered concepts", () => {
+  for (const [slug, bank] of [["graphic-design", "CREATIVE"], ["video-editing", "VIDEO"], ["excel", "EXCEL"], ["ui-ux-design", "UX"], ["sql", "SQL"]] as const) {
+    const tasks = buildDailyTasks({ candidateId: "c", dateKey: "2026-11-19", skills: [{ id: slug, slug, name: slug }] });
+    assert.equal(new Set(tasks.map((task) => task.concept)).size, 10);
+    for (const task of tasks) {
+      assert.ok([...BANKS[bank].slice(...TIER_RANGE[task.difficulty]), EXTRA[bank][task.position < 3 ? 0 : task.position < 7 ? 1 : 2]].some(([id]) => task.concept === id));
+      assert.equal(gradeDailyAnswer(task.questionType, task.acceptedAnswers, "generic answer"), false);
+      assert.ok(task.explanation);
+    }
   }
 });
 
@@ -179,7 +188,7 @@ test("practice drills are on-topic and carry no assessment vocabulary", () => {
   for (const task of tasks) {
     assert.doesNotMatch(task.scenario, /undefined|null|NaN/);
     assert.doesNotMatch(task.scenario, /marks|rubric/i);
-    assert.ok(task.minutes >= 10 && task.minutes <= 15);
-    assert.ok(task.scenario.length > 100);
+    assert.equal(task.minutes, task.position < 3 ? 2 : task.position < 7 ? 5 : 8);
+    assert.ok(task.scenario.length > 20);
   }
 });

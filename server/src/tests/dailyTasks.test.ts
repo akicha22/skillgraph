@@ -166,6 +166,7 @@ describe("daily task progression and grading", () => {
         expectedAnswer: string | null;
         explanation: string | null;
         solved: boolean;
+        selfReview: boolean;
       }[];
     };
 
@@ -185,17 +186,19 @@ describe("daily task progression and grading", () => {
         "ADVANCED",
       ],
     );
-    assert.deepEqual(
-      body.tasks.map((task) => task.points),
-      [5, 5, 5, 10, 10, 10, 10, 15, 15, 15],
-    );
     for (const task of body.tasks) {
       assert.ok(task.question.length > 0);
       assert.equal(task.expectedAnswer, null);
       assert.equal(task.explanation, null);
       assert.equal(task.solved, false);
     }
-    ids.firstTask = body.tasks[0].id;
+    const objective = body.tasks.find((task) => !task.selfReview);
+    const practical = body.tasks.find((task) => task.selfReview);
+    assert.ok(objective && practical);
+    assert.equal(objective.points, 5);
+    assert.equal(practical.points, 0);
+    ids.firstTask = objective.id;
+    ids.practical = practical.id;
   });
 
   it("awards nothing for a wrong answer and keeps the task open", async () => {
@@ -213,7 +216,7 @@ describe("daily task progression and grading", () => {
     assert.equal(body.task.solved, false);
     assert.equal(body.task.earnedPoints, 0);
     assert.equal(body.task.status, "PENDING");
-    assert.ok(body.task.explanation, "the explanation is revealed after a submission");
+    assert.equal(body.task.explanation, null, "an incorrect attempt must not reveal the answer key");
   });
 
   it("completes on a correct retry for half points and never pays twice", async () => {
@@ -261,6 +264,22 @@ describe("daily task progression and grading", () => {
     assert.equal(persisted.attempts, 2);
     assert.equal(persisted.earnedPoints, Math.floor(stored.points / 2));
     assert.equal(persisted.solved, true);
+  });
+
+  it("saves a practical output without grading it and reveals criteria after submission", async () => {
+    const answer = "Show mobile returns approval from opening the order through confirmation.";
+    const res = await post(`/api/candidate/tasks/${ids.practical}/answer`, cookies.candidateA, { answer });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.task.status, "DONE");
+    assert.equal(res.body.task.solved, false);
+    assert.equal(res.body.task.result, null);
+    assert.equal(res.body.task.answer, answer);
+    assert.equal(res.body.feedback.awarded, 0);
+    assert.equal(res.body.feedback.expectedAnswer, null);
+    assert.ok(res.body.feedback.explanation);
+    const reload = await get("/api/candidate/tasks", cookies.candidateA);
+    assert.equal(reload.body.summary.todayDone, 2);
+    assert.equal(reload.body.summary.tasksSolved, 1);
   });
 
   it("does not let another candidate answer someone else's task", async () => {
