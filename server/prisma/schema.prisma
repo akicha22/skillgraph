@@ -190,10 +190,23 @@ model AssessmentAttempt {
   criterionScores AssessmentCriterionScore[]
   shortlistEntries ShortlistEntry[]
   followUps    AttemptFollowUp[]
+  events       AttemptEvent[]
 
   // One attempt per candidate per version keeps answers from splitting across duplicates.
   @@unique([versionId, candidateId])
   @@index([candidateId])
+}
+
+model AttemptEvent {
+  id         String            @id @default(cuid())
+  attemptId  String
+  taskId     String?
+  type       String
+  occurredAt DateTime          @default(now())
+  metadata   String?
+  attempt    AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@index([attemptId, occurredAt])
 }
 
 model AssessmentResponse {

@@ -2,6 +2,11 @@ import { Router } from "express";
 import { z } from "zod";
 import { formatZodIssues } from "../auth/schemas";
 import { buildFollowUpQuestions } from "../assessments/followUps";
+import {
+  attemptEventBatchSchema,
+  buildAnswerSavedMetadata,
+  type AttemptEventType,
+} from "../assessments/attemptEvents";
 import { prisma } from "../db";
 import { currentUser, requireAuth, requireRole } from "../middleware/auth";
 import { asyncHandler } from "../utils/asyncHandler";
@@ -137,6 +142,32 @@ function isUniqueConstraintError(err: unknown): boolean {
   return typeof err === "object" && err !== null && "code" in err && (err as { code?: unknown }).code === "P2002";
 }
 
+type AttemptEventInput = {
+  attemptId: string;
+  taskId?: string;
+  type: AttemptEventType;
+  metadata?: Record<string, number | string>;
+};
+
+/** Events are diagnostic: a logging failure must never fail the candidate's save or submit. */
+async function recordAttemptEvent(input: AttemptEventInput): Promise<void> {
+  try {
+    await prisma.attemptEvent.create({
+      data: {
+        attemptId: input.attemptId,
+        taskId: input.taskId ?? null,
+        type: input.type,
+        metadata: input.metadata ? JSON.stringify(input.metadata) : null,
+      },
+    });
+  } catch (err) {
+    console.error(
+      `[attempt events] failed to record ${input.type} for attempt ${input.attemptId}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
 // Starts the candidate's attempt on a published version, or resumes the one they already have.
 candidateAttemptsRouter.post(
   "/",
@@ -245,6 +276,8 @@ candidateAttemptsRouter.post(
       return;
     }
 
+    await recordAttemptEvent({ attemptId: attempt.id, type: "SUBMITTED" });
+
     const submitted = await findAttempt(attempt.id, candidateId);
     if (!submitted) {
       res.status(404).json({ error: "Attempt not found" });
@@ -289,10 +322,22 @@ candidateAttemptsRouter.put(
       return;
     }
 
+    const previous = await prisma.assessmentResponse.findUnique({
+      where: { attemptId_taskId: { attemptId, taskId } },
+      select: { answer: true },
+    });
+
     const response = await prisma.assessmentResponse.upsert({
       where: { attemptId_taskId: { attemptId, taskId } },
       update: { answer: parsed.data.answer },
       create: { attemptId, taskId, answer: parsed.data.answer },
+    });
+
+    await recordAttemptEvent({
+      attemptId,
+      taskId,
+      type: "ANSWER_SAVED",
+      metadata: buildAnswerSavedMetadata(previous?.answer, parsed.data.answer),
     });
 
     res.json({
@@ -300,6 +345,63 @@ candidateAttemptsRouter.put(
       answer: response.answer,
       savedAt: response.savedAt,
     });
+  }),
+);
+
+// Records a client-side batch (task opens, pastes, focus changes) for a live attempt.
+candidateAttemptsRouter.post(
+  "/:attemptId/events",
+  asyncHandler(async (req, res) => {
+    const parsed = attemptEventBatchSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid events", details: formatZodIssues(parsed.error) });
+      return;
+    }
+
+    const attemptId = routeParam(req.params.attemptId);
+    const attempt = await prisma.assessmentAttempt.findFirst({
+      where: { id: attemptId, candidateId: currentUser(res).id },
+      select: { id: true, versionId: true, status: true },
+    });
+    if (!attempt) {
+      res.status(404).json({ error: "Attempt not found" });
+      return;
+    }
+    if (attempt.status !== "IN_PROGRESS") {
+      res.status(409).json({ error: "This attempt has already been submitted" });
+      return;
+    }
+
+    const taskIds = [
+      ...new Set(
+        parsed.data.events
+          .map((event) => event.taskId)
+          .filter((taskId): taskId is string => taskId !== undefined),
+      ),
+    ];
+    if (taskIds.length > 0) {
+      const tasks = await prisma.assessmentTask.findMany({
+        where: { id: { in: taskIds }, versionId: attempt.versionId },
+        select: { id: true },
+      });
+      if (tasks.length !== taskIds.length) {
+        res.status(400).json({ error: "A task in this batch is not part of this assessment" });
+        return;
+      }
+    }
+
+    if (parsed.data.events.length > 0) {
+      await prisma.attemptEvent.createMany({
+        data: parsed.data.events.map((event) => ({
+          attemptId: attempt.id,
+          taskId: event.taskId ?? null,
+          type: event.type,
+          metadata: event.metadata === undefined ? null : JSON.stringify(event.metadata),
+        })),
+      });
+    }
+
+    res.status(201).json({ recorded: parsed.data.events.length });
   }),
 );
 
