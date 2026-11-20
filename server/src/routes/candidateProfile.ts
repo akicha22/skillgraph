@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import { formatZodIssues } from "../auth/schemas";
+import { verifyPassword } from "../auth/password";
+import { clearSessionCookie } from "../auth/session";
 import { prisma } from "../db";
 import { currentUser, requireAuth, requireRole } from "../middleware/auth";
 import { asyncHandler } from "../utils/asyncHandler";
@@ -39,6 +41,12 @@ const profileSchema = z
   .strict()
   .refine((value) => Object.keys(value).length > 0, { message: "Send at least one field" });
 
+const consentSchema = z.object({ version: z.literal("v1") });
+const leaderboardSchema = z.object({ optIn: z.boolean() });
+const deleteAccountSchema = z.object({
+  password: z.string().min(1, "Enter your password").max(72),
+});
+
 candidateProfileRouter.get(
   "/",
   asyncHandler(async (_req, res) => {
@@ -54,6 +62,9 @@ candidateProfileRouter.get(
           location: true,
           about: true,
           yearsExperience: true,
+          consentVersion: true,
+          consentAt: true,
+          leaderboardOptIn: true,
           isDemo: true,
           createdAt: true,
         },
@@ -115,6 +126,9 @@ candidateProfileRouter.get(
         location: user.location,
         about: user.about,
         yearsExperience: user.yearsExperience,
+        consentVersion: user.consentVersion,
+        consentAt: user.consentAt,
+        leaderboardOptIn: user.leaderboardOptIn,
         isDemo: user.isDemo,
         memberSince: user.createdAt,
       },
@@ -148,6 +162,46 @@ candidateProfileRouter.get(
         };
       }),
     });
+  }),
+);
+
+// Records the candidate's acceptance of the current consent text.
+candidateProfileRouter.post(
+  "/consent",
+  asyncHandler(async (req, res) => {
+    const parsed = consentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid consent", details: formatZodIssues(parsed.error) });
+      return;
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: currentUser(res).id },
+      data: { consentVersion: parsed.data.version, consentAt: new Date() },
+      select: { consentVersion: true, consentAt: true },
+    });
+
+    res.json({ consentVersion: updated.consentVersion, consentAt: updated.consentAt });
+  }),
+);
+
+// Controls whether the candidate appears in the public practice leaderboard.
+candidateProfileRouter.put(
+  "/leaderboard",
+  asyncHandler(async (req, res) => {
+    const parsed = leaderboardSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid leaderboard setting", details: formatZodIssues(parsed.error) });
+      return;
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: currentUser(res).id },
+      data: { leaderboardOptIn: parsed.data.optIn },
+      select: { leaderboardOptIn: true },
+    });
+
+    res.json({ leaderboardOptIn: updated.leaderboardOptIn });
   }),
 );
 
@@ -188,5 +242,36 @@ candidateProfileRouter.patch(
         memberSince: updated.createdAt,
       },
     });
+  }),
+);
+
+// Deletes the candidate's own account after re-checking their password. Every candidate-owned
+// relation cascades; audit rows keep their history with the actor set to null.
+candidateProfileRouter.delete(
+  "/",
+  asyncHandler(async (req, res) => {
+    const parsed = deleteAccountSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid request", details: formatZodIssues(parsed.error) });
+      return;
+    }
+
+    const userId = currentUser(res).id;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true },
+    });
+    if (!user) {
+      res.status(401).json({ error: "Please sign in to continue" });
+      return;
+    }
+    if (!(await verifyPassword(parsed.data.password, user.passwordHash))) {
+      res.status(401).json({ error: "Incorrect password" });
+      return;
+    }
+
+    await prisma.user.delete({ where: { id: userId } });
+    clearSessionCookie(res);
+    res.status(204).end();
   }),
 );

@@ -21,6 +21,7 @@ import { TEST_DATABASE_FILE } from "./testEnv.js";
 
 const SERVER_DIR = fileURLToPath(new URL("../..", import.meta.url));
 const PASSWORD = "PermissionTest123";
+const CANDIDATE_D_EMAIL = "candidate.d@permissions.test";
 
 let server: Server | undefined;
 let baseUrl = "";
@@ -30,12 +31,19 @@ const fixture = {
   recruiterBCookie: "",
   candidateACookie: "",
   candidateBCookie: "",
+  candidateCCookie: "",
+  candidateDCookie: "",
+  candidateAId: "",
+  candidateBId: "",
+  candidateCId: "",
   attemptA: "",
   attemptB: "",
   versionA: "",
   versionB: "",
+  versionC: "",
   assessmentB: "",
   shortlistB: "",
+  skillId: "",
 };
 
 async function signIn(email: string): Promise<string> {
@@ -61,6 +69,24 @@ async function get(path: string, cookie?: string) {
 async function put(path: string, cookie: string, body: unknown) {
   const res = await fetch(`${baseUrl}${path}`, {
     method: "PUT",
+    headers: { "content-type": "application/json", cookie },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, body: await res.json().catch(() => null) };
+}
+
+async function post(path: string, cookie: string, body: unknown) {
+  const res = await fetch(`${baseUrl}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, body: await res.json().catch(() => null) };
+}
+
+async function del(path: string, cookie: string, body: unknown) {
+  const res = await fetch(`${baseUrl}${path}`, {
+    method: "DELETE",
     headers: { "content-type": "application/json", cookie },
     body: JSON.stringify(body),
   });
@@ -167,6 +193,22 @@ before(async () => {
       passwordHash,
     },
   });
+  const candidateC = await prisma.user.create({
+    data: {
+      email: "candidate.c@permissions.test",
+      name: "Candidate C",
+      role: "CANDIDATE",
+      passwordHash,
+    },
+  });
+  const candidateD = await prisma.user.create({
+    data: {
+      email: CANDIDATE_D_EMAIL,
+      name: "Candidate D",
+      role: "CANDIDATE",
+      passwordHash,
+    },
+  });
 
   const domain = await prisma.skillDomain.create({
     data: {
@@ -195,6 +237,11 @@ before(async () => {
     skill.id,
     "Permission test B",
   );
+  const assessmentC = await createPublishedAssessment(
+    recruiterA.id,
+    skill.id,
+    "Permission test C",
+  );
 
   const attemptA = await prisma.assessmentAttempt.create({
     data: {
@@ -216,10 +263,15 @@ before(async () => {
     data: { ownerId: recruiterB.id, name: "Recruiter B list" },
   });
 
+  fixture.candidateAId = candidateA.id;
+  fixture.candidateBId = candidateB.id;
+  fixture.candidateCId = candidateC.id;
+  fixture.skillId = skill.id;
   fixture.attemptA = attemptA.id;
   fixture.attemptB = attemptB.id;
   fixture.versionA = assessmentA.versionId;
   fixture.versionB = assessmentB.versionId;
+  fixture.versionC = assessmentC.versionId;
   fixture.assessmentB = assessmentB.assessmentId;
   fixture.shortlistB = shortlistB.id;
 
@@ -233,6 +285,8 @@ before(async () => {
   fixture.recruiterBCookie = await signIn("recruiter.b@permissions.test");
   fixture.candidateACookie = await signIn("candidate.a@permissions.test");
   fixture.candidateBCookie = await signIn("candidate.b@permissions.test");
+  fixture.candidateCCookie = await signIn("candidate.c@permissions.test");
+  fixture.candidateDCookie = await signIn(CANDIDATE_D_EMAIL);
 });
 
 after(async () => {
@@ -514,5 +568,154 @@ describe("interview follow-ups", () => {
     assert.equal(followUps.length, 1);
     assert.equal(followUps[0].criterionId, criterion.id);
     assert.equal(followUps[0].candidateAnswer, answer);
+  });
+});
+
+describe("candidate consent", () => {
+  it("blocks a new attempt until consent and still resumes an existing one", async () => {
+    const blocked = await post("/api/candidate/attempts", fixture.candidateCCookie, {
+      versionId: fixture.versionC,
+    });
+    assert.equal(blocked.status, 403);
+    assert.match(errorOf(blocked.body), /consent/i);
+
+    const consent = await post("/api/candidate/profile/consent", fixture.candidateCCookie, {
+      version: "v1",
+    });
+    assert.equal(consent.status, 200);
+
+    const profile = await get("/api/candidate/profile", fixture.candidateCCookie);
+    const profileBody = profile.body as {
+      profile: { consentVersion: string | null; consentAt: string | null };
+    };
+    assert.equal(profileBody.profile.consentVersion, "v1");
+    assert.ok(profileBody.profile.consentAt);
+
+    const started = await post("/api/candidate/attempts", fixture.candidateCCookie, {
+      versionId: fixture.versionC,
+    });
+    assert.equal(started.status, 200);
+
+    // Consent is only required for a new attempt, not for reopening an existing one.
+    await prisma.user.update({
+      where: { id: fixture.candidateCId },
+      data: { consentAt: null },
+    });
+    const resumed = await post("/api/candidate/attempts", fixture.candidateCCookie, {
+      versionId: fixture.versionC,
+    });
+    assert.equal(resumed.status, 200);
+  });
+});
+
+describe("leaderboard opt-in", () => {
+  it("hides a non-opted-in candidate from entries but keeps their own totals", async () => {
+    await prisma.user.update({
+      where: { id: fixture.candidateAId },
+      data: { leaderboardOptIn: false },
+    });
+    await prisma.user.update({
+      where: { id: fixture.candidateBId },
+      data: { leaderboardOptIn: true },
+    });
+    await prisma.dailyTask.createMany({
+      data: [
+        {
+          candidateId: fixture.candidateAId,
+          skillId: fixture.skillId,
+          day: "2026-11-20",
+          position: 1,
+          family: "GENERAL",
+          title: "Leaderboard fixture A",
+          scenario: "A short practice scenario.",
+          steps: JSON.stringify(["one", "two", "three"]),
+          estimateMinutes: 5,
+          difficulty: "BEGINNER",
+          question: "Fixture question?",
+          answerKey: JSON.stringify({ type: "SHORT_TEXT", accepted: ["fixture"] }),
+          points: 5,
+          earnedPoints: 5,
+          solved: true,
+          status: "DONE",
+        },
+        {
+          candidateId: fixture.candidateBId,
+          skillId: fixture.skillId,
+          day: "2026-11-20",
+          position: 1,
+          family: "GENERAL",
+          title: "Leaderboard fixture B",
+          scenario: "A short practice scenario.",
+          steps: JSON.stringify(["one", "two", "three"]),
+          estimateMinutes: 5,
+          difficulty: "BEGINNER",
+          question: "Fixture question?",
+          answerKey: JSON.stringify({ type: "SHORT_TEXT", accepted: ["fixture"] }),
+          points: 10,
+          earnedPoints: 10,
+          solved: true,
+          status: "DONE",
+        },
+      ],
+    });
+
+    const hidden = await get("/api/leaderboard", fixture.candidateACookie);
+    assert.equal(hidden.status, 200);
+    const hiddenBody = hidden.body as {
+      entries: { name: string }[];
+      me: { rank: number | null; points: number; tasksSolved: number };
+    };
+    assert.equal(
+      hiddenBody.entries.some((entry) => entry.name === "Candidate A"),
+      false,
+    );
+    assert.equal(hiddenBody.me.rank, null);
+    assert.equal(hiddenBody.me.points, 5);
+    assert.equal(hiddenBody.me.tasksSolved, 1);
+
+    const visible = await get("/api/leaderboard", fixture.candidateBCookie);
+    assert.equal(visible.status, 200);
+    const visibleBody = visible.body as {
+      entries: { name: string }[];
+      me: { rank: number | null; points: number };
+    };
+    assert.equal(
+      visibleBody.entries.some((entry) => entry.name === "Candidate B"),
+      true,
+    );
+    assert.equal(typeof visibleBody.me.rank, "number");
+    assert.equal(visibleBody.me.points, 10);
+  });
+});
+
+describe("account deletion", () => {
+  it("keeps the account when the password is wrong", async () => {
+    const denied = await del("/api/candidate/profile", fixture.candidateDCookie, {
+      password: "WrongPassword123",
+    });
+    assert.equal(denied.status, 401);
+    assert.match(errorOf(denied.body), /password/i);
+    assert.equal((await get("/api/candidate/profile", fixture.candidateDCookie)).status, 200);
+  });
+
+  it("deletes the account with the right password and rejects the next login", async () => {
+    const deleted = await del("/api/candidate/profile", fixture.candidateDCookie, {
+      password: PASSWORD,
+    });
+    assert.equal(deleted.status, 204);
+
+    const login = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: CANDIDATE_D_EMAIL, password: PASSWORD }),
+    });
+    assert.equal(login.status, 401);
+  });
+
+  it("does not let a recruiter delete a candidate profile", async () => {
+    const res = await del("/api/candidate/profile", fixture.recruiterACookie, {
+      password: PASSWORD,
+    });
+    assert.equal(res.status, 403);
   });
 });

@@ -198,12 +198,21 @@ candidateAttemptsRouter.post(
       return;
     }
 
+    const candidate = await prisma.user.findUnique({
+      where: { id: candidateId },
+      select: { consentAt: true },
+    });
+    if (!candidate?.consentAt) {
+      res.status(403).json({ error: "Consent required" });
+      return;
+    }
+
     try {
       const created = await prisma.assessmentAttempt.create({
         data: { versionId, candidateId },
         select: { id: true },
       });
-      res.status(201).json(await attemptDetail(created.id, candidateId));
+      res.status(200).json(await attemptDetail(created.id, candidateId));
     } catch (err) {
       // Two tabs can start at once; the unique pair means one wins and the other resumes it.
       if (!isUniqueConstraintError(err)) throw err;

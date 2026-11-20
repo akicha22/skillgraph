@@ -29,23 +29,39 @@ leaderboardRouter.get(
         id: { in: grouped.map((row) => row.candidateId) },
         role: "CANDIDATE",
       },
-      select: { id: true, name: true },
+      select: { id: true, name: true, leaderboardOptIn: true },
     });
-    const nameById = new Map(candidates.map((candidate) => [candidate.id, candidate.name]));
+    const candidateById = new Map(candidates.map((candidate) => [candidate.id, candidate]));
 
-    const ranked = rankLeaderboard(
-      grouped
-        .filter((row) => nameById.has(row.candidateId))
-        .map((row) => ({
+    const rows = grouped.flatMap((row) => {
+      const candidate = candidateById.get(row.candidateId);
+      if (!candidate) return [];
+      return [
+        {
           candidateId: row.candidateId,
-          name: nameById.get(row.candidateId) ?? "Candidate",
+          name: candidate.name,
           points: row._sum.earnedPoints ?? 0,
           tasksSolved: row._count._all,
+          optedIn: candidate.leaderboardOptIn === true,
+        },
+      ];
+    });
+
+    // Rank only opted-in candidates, so hidden candidates leave no gaps in the public ranks.
+    const ranked = rankLeaderboard(
+      rows
+        .filter((row) => row.optedIn)
+        .map(({ candidateId, name, points, tasksSolved }) => ({
+          candidateId,
+          name,
+          points,
+          tasksSolved,
         })),
     );
 
     const user = currentUser(res);
-    const mine = ranked.find((row) => row.candidateId === user.id);
+    const mine = rows.find((row) => row.candidateId === user.id);
+    const myRanked = ranked.find((row) => row.candidateId === user.id);
 
     res.json({
       entries: ranked.map((row) => ({
@@ -55,14 +71,19 @@ leaderboardRouter.get(
         tasksSolved: row.tasksSolved,
         isMe: row.candidateId === user.id,
       })),
-      me: mine
+      me: myRanked
         ? {
-            name: mine.name,
-            points: mine.points,
-            tasksSolved: mine.tasksSolved,
-            rank: mine.rank,
+            name: myRanked.name,
+            points: myRanked.points,
+            tasksSolved: myRanked.tasksSolved,
+            rank: myRanked.rank,
           }
-        : { name: user.name, points: 0, tasksSolved: 0, rank: null },
+        : {
+            name: mine?.name ?? user.name,
+            points: mine?.points ?? 0,
+            tasksSolved: mine?.tasksSolved ?? 0,
+            rank: null,
+          },
     });
   }),
 );
