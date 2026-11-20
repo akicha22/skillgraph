@@ -5,7 +5,8 @@ import { prisma } from "../db";
 import { parseRequirements, warnOnUnknownSlugs } from "../assessments/requirementParser";
 import { clarificationQuestions, mergeClarifications } from "../assessments/clarify";
 import { LEVELS, type Level, type Difficulty } from "../assessments/constants";
-import { requireAuth, requireRole } from "../middleware/auth";
+import { currentUser, requireAuth, requireRole } from "../middleware/auth";
+import { rateLimit } from "../middleware/rateLimit";
 import { asyncHandler } from "../utils/asyncHandler";
 import { generationSchemaWithRefinements } from "../assessments/generationSchema";
 import { generateAssessmentDraft } from "../ai";
@@ -21,6 +22,13 @@ import { env } from "../env";
 
 export const recruiterAssessmentsRouter = Router();
 recruiterAssessmentsRouter.use(requireAuth, requireRole("RECRUITER"));
+
+// Only /generate calls the AI provider; /parse-requirements and /clarify are deterministic.
+const aiGenerationLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  key: (_req, res) => currentUser(res).id,
+});
 
 // Express 5 types route params as string | string[]; these routes only ever take one value.
 function routeParam(value: string | string[] | undefined): string {
@@ -143,6 +151,7 @@ recruiterAssessmentsRouter.post(
 
 recruiterAssessmentsRouter.post(
   "/generate",
+  aiGenerationLimit,
   asyncHandler(async (req, res) => {
     const parsedBody = generationSchemaWithRefinements.safeParse(req.body);
     if (!parsedBody.success) {

@@ -6,12 +6,30 @@ import { clearSessionCookie, setSessionCookie } from "../auth/session";
 import { formatZodIssues, loginSchema, registerSchema } from "../auth/schemas";
 import { publicUserSelect, toPublicUser } from "../auth/user";
 import { currentUser, requireAuth } from "../middleware/auth";
+import { rateLimit } from "../middleware/rateLimit";
 import { asyncHandler } from "../utils/asyncHandler";
 
 export const authRouter = Router();
 
+const registerLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  key: (req) => req.ip ?? req.socket.remoteAddress ?? "unknown",
+});
+
+const loginLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  key: (req) => {
+    const body = req.body as { email?: unknown } | undefined;
+    const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
+    return `${req.ip ?? req.socket.remoteAddress ?? "unknown"}:${email}`;
+  },
+});
+
 authRouter.post(
   "/register",
+  registerLimit,
   asyncHandler(async (req, res) => {
     const parsed = registerSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -49,6 +67,7 @@ authRouter.post(
 
 authRouter.post(
   "/login",
+  loginLimit,
   asyncHandler(async (req, res) => {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {

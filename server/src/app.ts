@@ -6,6 +6,7 @@ import { prisma } from "./db";
 import { authRouter } from "./routes/auth";
 import { candidateGuardRouter, recruiterGuardRouter } from "./routes/guardChecks";
 import { errorHandler } from "./middleware/errors";
+import { securityHeaders } from "./middleware/securityHeaders";
 import { skillsRouter } from "./routes/skills";
 import { candidateSkillsRouter } from "./routes/candidateSkills";
 import { recruiterAssessmentsRouter } from "./routes/recruiterAssessments";
@@ -24,6 +25,10 @@ import { locationsRouter } from "./routes/locations";
  * an ephemeral port so the real middleware and routers are exercised.
  */
 export const app = express();
+app.disable("x-powered-by");
+if (env.NODE_ENV === "production") app.set("trust proxy", 1);
+app.use(securityHeaders);
+
 const allowedOrigins = env.CORS_ORIGIN.split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
