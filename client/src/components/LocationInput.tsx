@@ -1,3 +1,4 @@
+import { Input } from "./ui/Field";
 import { useEffect, useId, useRef, useState } from "react";
 import { MapPin } from "lucide-react";
 import { searchLocations } from "../services/assessments";
@@ -98,10 +99,10 @@ export default function LocationInput({
       }}
     >
       <MapPin
-        className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+        className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600"
         aria-hidden
       />
-      <input
+      <Input
         id={inputId}
         role="combobox"
         aria-expanded={open}
@@ -123,11 +124,11 @@ export default function LocationInput({
           setLoading(true);
         }}
         onKeyDown={handleKeyDown}
-        className={`w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 ${className}`}
+        className={`pl-9 ${className}`}
       />
 
       {open && (
-        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-control border border-slate-200 bg-white shadow-overlay">
           {loading && options.length === 0 ? (
             <p className="px-3 py-2 text-xs text-slate-500">Searching locations…</p>
           ) : options.length > 0 ? (
@@ -142,8 +143,8 @@ export default function LocationInput({
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => choose(location)}
                     onMouseEnter={() => setActiveIndex(index)}
-                    className={`flex w-full items-baseline justify-between gap-3 px-3 py-2 text-left text-sm ${
-                      index === activeIndex ? "bg-indigo-50 text-indigo-900" : "text-slate-700"
+                    className={`flex min-h-11 w-full flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2 text-left text-sm focus-visible:-outline-offset-2 ${
+                      index === activeIndex ? "bg-brand-50 text-brand-900" : "text-slate-700"
                     }`}
                   >
                     <span className="font-medium">{location.name}</span>
