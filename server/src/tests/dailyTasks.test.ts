@@ -282,6 +282,40 @@ describe("daily task progression and grading", () => {
     assert.equal(reload.body.summary.tasksSolved, 1);
   });
 
+  it("refreshes a nonblank legacy SQL arithmetic prompt without rewriting completed work", async () => {
+    const sales = await prisma.skill.findUniqueOrThrow({ where: { id: ids.skill } });
+    const sql = await prisma.skill.create({ data: {
+      slug: "sql", name: "SQL", description: "SQL fixture",
+      assessmentTypes: "STRUCTURED_RESPONSE", domainId: sales.domainId,
+    } });
+    await prisma.candidateSkill.updateMany({
+      where: { userId: ids.candidateB, skillId: sales.id }, data: { skillId: sql.id },
+    });
+    const legacy = await prisma.dailyTask.create({ data: {
+      candidateId: ids.candidateB, skillId: sql.id, day: dayKey(), position: 5,
+      family: "DATA", title: "SQL: explaining a drop in performance", scenario: "A legacy scenario.",
+      steps: "[]", estimateMinutes: 11, difficulty: "INTERMEDIATE",
+      question: "How many conversions this month?",
+      answerKey: JSON.stringify({ type: "NUMBER", accepted: ["891"], explanation: "Legacy calculation." }),
+      points: 10,
+    } });
+    const stale = await post(`/api/candidate/tasks/${legacy.id}/answer`, cookies.candidateB, { answer: "891" });
+    assert.equal(stale.status, 409);
+    const response = await get("/api/candidate/tasks", cookies.candidateB);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.tasks.length, 10);
+    const current = response.body.tasks[5];
+    assert.equal(current.id, legacy.id);
+    assert.equal(current.skillName, "SQL");
+    assert.match(current.question, /query/);
+    assert.match(current.scenario, /orders\(order_id, store_id\)/);
+    assert.equal(current.explanation, null);
+    assert.equal(response.body.tasks[9].answer, "15");
+    assert.equal(response.body.tasks[9].earnedPoints, 15);
+    const reload = await get("/api/candidate/tasks", cookies.candidateB);
+    assert.deepEqual(reload.body.tasks, response.body.tasks);
+  });
+
   it("does not let another candidate answer someone else's task", async () => {
     const res = await post(`/api/candidate/tasks/${ids.firstTask}/answer`, cookies.candidateB, {
       answer: "15",

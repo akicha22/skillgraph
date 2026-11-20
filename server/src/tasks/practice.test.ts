@@ -155,12 +155,30 @@ test("a one-skill profile can get different concepts without repeating formats",
 });
 
 test("unsupported skills never get unrelated tasks, even beside a supported skill", () => {
-  const unsupported = { id: "unsupported", slug: "civil-engineering", name: "Civil engineering" };
+  const unsupported = { id: "unsupported", slug: "surveying", name: "Surveying" };
   const input = { candidateId: "c", dateKey: "2026-11-19", jobTitle: "Graphic designer" };
   assert.deepEqual(buildDailyTasks({ ...input, skills: [unsupported] }), []);
   const tasks = buildDailyTasks({ ...input, skills: [unsupported, SKILLS[1]] });
   assert.equal(tasks.length, 10);
   assert.ok(tasks.every((task) => task.skillId === SKILLS[1].id));
+});
+
+test("SQL, civil engineering and video editing require distinct job-specific work", () => {
+  function setFor(slug: string) {
+    return buildDailyTasks({ candidateId: "c", dateKey: "2026-11-19", skills: [{ id: slug, slug, name: slug }] });
+  }
+  const sql = setFor("sql");
+  assert.match(sql[3].scenario, /orders\(order_id, customer_id, amount, order_date\)/);
+  assert.match(sql[3].question, /Write a query/);
+  assert.match(sql[4].explanation, /HAVING/);
+  assert.match(sql[7].scenario, /INNER JOIN.*LEFT JOIN/);
+  assert.match(sql[8].explanation, /execution plan/);
+  const civil = setFor("civil-engineering");
+  assert.match(civil[0].explanation, /3\.6 m³/);
+  assert.match(civil[7].explanation, /drainage/);
+  const video = setFor("video-editing");
+  assert.match(video[3].scenario, /vertical reel/);
+  assert.match(video[8].question, /pacing edit/);
 });
 
 test("numeric answers tolerate currency symbols, commas and rounding", () => {

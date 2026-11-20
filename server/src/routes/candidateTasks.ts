@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { Router } from "express";
 import { z } from "zod";
 import { formatZodIssues } from "../auth/schemas";
@@ -24,6 +25,17 @@ function parseSteps(value: string): string[] {
     return Array.isArray(parsed) ? parsed.filter((row): row is string => typeof row === "string") : [];
   } catch {
     return [];
+  }
+}
+
+// Old rows predate exact skill matching. Stamp every newly generated or upgraded key.
+const BANK_REVISION = 1;
+
+function isCurrentBank(value: string): boolean {
+  try {
+    return JSON.parse(value)?.bankRevision === BANK_REVISION;
+  } catch {
+    return false;
   }
 }
 
@@ -129,81 +141,47 @@ candidateTasksRouter.get(
     let needsSkills = false;
     let needsSupportedSkills = false;
 
-    if (tasks.length === 0) {
+    const isUntouchedLegacy = (task: (typeof tasks)[number]) =>
+      task.status === "PENDING" && task.attempts === 0 && !task.solved &&
+      (task.question.length === 0 || !isCurrentBank(task.answerKey));
+
+    if (tasks.length === 0 || tasks.some(isUntouchedLegacy)) {
       const skills = await prisma.candidateSkill.findMany({
         where: { userId: candidateId },
-        orderBy: { createdAt: "asc" },
+        orderBy: [{ createdAt: "asc" }, { skillId: "asc" }],
         select: { skill: { select: { id: true, slug: true, name: true } } },
       });
-      const plans = buildDailyTasks({
-        candidateId,
-        dateKey: today,
-        skills: skills.map((row) => row.skill),
-      });
-      needsSkills = skills.length === 0;
-      needsSupportedSkills = !needsSkills && plans.length === 0;
-
-      if (plans.length > 0) {
-        // Upserts on (candidate, day, position): two open tabs on the same day cannot duplicate a
-        // set, and SQLite does not support createMany's skipDuplicates option.
-        await prisma.$transaction(
-          plans.map((plan) =>
-            prisma.dailyTask.upsert({
-              where: {
-                candidateId_day_position: {
-                  candidateId,
-                  day: today,
-                  position: plan.position,
-                },
-              },
-              update: {},
-              create: {
-                candidateId,
-                skillId: plan.skillId,
-                day: today,
-                position: plan.position,
-                family: plan.family,
-                title: plan.title,
-                scenario: plan.scenario,
-                steps: JSON.stringify(plan.steps),
-                estimateMinutes: plan.minutes,
-                difficulty: plan.difficulty,
-                question: plan.question,
-                answerKey: JSON.stringify({
-                  type: plan.questionType,
-                  accepted: plan.acceptedAnswers,
-                  explanation: plan.explanation,
-                }),
-                points: plan.points,
-              },
-            }),
-          ),
-        );
-        tasks = await tasksForDay(candidateId, today);
-      }
-    }
-
-    // Repair only old, unanswered rows without a question. Existing published sets and scores
-    // otherwise stay unchanged; newly generated days use the curated bank.
-    if (tasks.some((task) => !task.question && task.status === "PENDING" && task.attempts === 0)) {
-      const skills = [...new Map(tasks.map((task) => [task.skillId, task.skill])).values()];
-      const plans = buildDailyTasks({ candidateId, dateKey: today, skills });
-      await prisma.$transaction(tasks.flatMap((task) => {
-        const plan = plans[task.position];
-        if (!plan || task.question || task.status !== "PENDING" || task.attempts > 0) return [];
-        return [prisma.dailyTask.updateMany({
-          where: { id: task.id, question: "", status: "PENDING", attempts: 0 },
-          data: {
-            skillId: plan.skillId, family: plan.family, title: plan.title, scenario: plan.scenario,
-            steps: "[]", estimateMinutes: plan.minutes, difficulty: plan.difficulty,
-            question: plan.question, points: plan.points,
-            answerKey: JSON.stringify({
-              type: plan.questionType, accepted: plan.acceptedAnswers, explanation: plan.explanation,
-            }),
-          },
+      const plans = buildDailyTasks({ candidateId, dateKey: today, skills: skills.map((row) => row.skill) });
+      const existing = new Map(tasks.map((task) => [task.position, task]));
+      const writes = plans.flatMap<Prisma.PrismaPromise<unknown>>((plan) => {
+        const task = existing.get(plan.position);
+        if (task && !isUntouchedLegacy(task)) return [];
+        const data = {
+          skillId: plan.skillId, family: plan.family, title: plan.title, scenario: plan.scenario,
+          steps: JSON.stringify(plan.steps), estimateMinutes: plan.minutes, difficulty: plan.difficulty,
+          question: plan.question, points: plan.points,
+          answerKey: JSON.stringify({
+            bankRevision: BANK_REVISION, type: plan.questionType,
+            accepted: plan.acceptedAnswers, explanation: plan.explanation,
+          }),
+        };
+        if (task) {
+          // Compare the old key and attempt state so a concurrent submission or refresh wins safely.
+          return [prisma.dailyTask.updateMany({
+            where: { id: task.id, status: "PENDING", attempts: 0, solved: false, answerKey: task.answerKey },
+            data,
+          })];
+        }
+        return [prisma.dailyTask.upsert({
+          where: { candidateId_day_position: { candidateId, day: today, position: plan.position } },
+          update: {},
+          create: { ...data, candidateId, day: today, position: plan.position },
         })];
-      }));
-      tasks = await tasksForDay(candidateId, today);
+      });
+      if (writes.length > 0) await prisma.$transaction(writes);
+      tasks = (await tasksForDay(candidateId, today)).filter((task) => !isUntouchedLegacy(task));
+      needsSkills = tasks.length === 0 && skills.length === 0;
+      needsSupportedSkills = tasks.length === 0 && skills.length > 0;
     }
 
     const since = shiftDayKey(today, -6);
@@ -306,13 +284,18 @@ candidateTasksRouter.post(
       return;
     }
 
+    if (task.day === dayKey() && task.attempts === 0 && (!task.question || !isCurrentBank(task.answerKey))) {
+      res.status(409).json({ error: "This practice question is out of date. Reload Daily tasks for the current question." });
+      return;
+    }
+
     const submitted = parsed.data.answer;
     const selfReview = key.type === "SELF_REVIEW";
     const correct = gradeDailyAnswer(key.type, key.accepted, submitted);
     const awarded = correct ? awardPoints(task.points, task.attempts) : 0;
 
     const write = await prisma.dailyTask.updateMany({
-      where: { id: task.id, status: "PENDING", attempts: task.attempts },
+      where: { id: task.id, status: "PENDING", attempts: task.attempts, answerKey: task.answerKey },
       data: {
         answer: submitted,
         attempts: { increment: 1 },

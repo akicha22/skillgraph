@@ -255,7 +255,7 @@ export default function CandidateTasks() {
         <Card><EmptyState
           icon={<ListChecks className="size-5" />}
           title={data.needsSupportedSkills ? "No daily bank for your selected skills yet" : "Choose your skills first"}
-          text="Daily practice is available for Sales, Client Communication, Leadership, Graphic Design, Video Editing, UI/UX Design, Excel, and SQL. Choose a relevant skill to get started."
+          text="Daily practice is available for Sales, Client Communication, Leadership, Graphic Design, Video Editing, UI/UX Design, Excel, SQL, and Civil Engineering. Choose a relevant skill to get started."
           action={<Link to="/candidate/skills" className={buttonClasses()}>Choose skills</Link>}
         /></Card>
       ) : activeTask ? (
@@ -264,7 +264,7 @@ export default function CandidateTasks() {
             <Button variant="secondary" size="sm" disabled={activeIndex <= 0 || busyId !== null}
               onClick={() => setPosition(data.tasks[activeIndex - 1].position)}>Previous</Button>
             <span className="text-sm font-medium text-slate-700" aria-live="polite">
-              Q{activeTask.position + 1} of {data.tasks.length}
+              Q{activeIndex + 1} of {data.tasks.length}
             </span>
             <Button variant="secondary" size="sm" disabled={activeIndex >= data.tasks.length - 1 || busyId !== null}
               onClick={() => setPosition(data.tasks[activeIndex + 1].position)}>Next</Button>
