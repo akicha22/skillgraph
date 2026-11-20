@@ -655,6 +655,7 @@ export type CandidateTasksResponse = {
   day: string;
   /** True when the candidate has not chosen skills, so there is nothing honest to practise. */
   needsSkills: boolean;
+  needsSupportedSkills: boolean;
   tasks: DailyTask[];
   summary: {
     todayTotal: number;

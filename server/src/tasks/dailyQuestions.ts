@@ -1,27 +1,20 @@
-import type { SkillFamily } from "../assessments/scenarios";
-import { BANKS, EXTRA, TIER_RANGE } from "./dailyBank";
+import { ALTERNATES, FORMATS, TYPED_BANKS } from "./typedBank";
 
-export type DailyDifficulty = keyof typeof TIER_RANGE;
+export type DailyDifficulty = "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
 export type DailyQuestionType = "NUMBER" | "SHORT_TEXT" | "SELF_REVIEW";
 
-export function buildDailyQuestion(input: {
-  seed: number;
-  family: SkillFamily;
-  skill: string;
-  difficulty: DailyDifficulty;
-  used: ReadonlySet<string>;
-}) {
-  const bankId = /video|film editing/i.test(input.skill) ? "VIDEO"
-    : /excel|spreadsheet/i.test(input.skill) ? "EXCEL"
-    : /\bsql\b/i.test(input.skill) ? "SQL"
-    : /\bux\b|user experience/i.test(input.skill) ? "UX" : input.family;
-  const tierIndex = input.difficulty === "BEGINNER" ? 0 : input.difficulty === "INTERMEDIATE" ? 1 : 2;
-  const pool = [...BANKS[bankId].slice(...TIER_RANGE[input.difficulty]), EXTRA[bankId][tierIndex]]
-    .filter(([id]) => !input.used.has(id));
-  // A tier contains at least as many concepts as there are slots in that tier.
-  const [concept, scenario, question, explanation, key] = pool[input.seed % pool.length];
+type BankId = keyof typeof TYPED_BANKS;
+
+export function getDailyBankId(slug: string): BankId | undefined {
+  const normalized = slug.trim().toLowerCase().replace(/[/_\s]+/g, "-");
+  return Object.hasOwn(TYPED_BANKS, normalized) ? normalized as BankId : undefined;
+}
+
+export function buildDailyQuestion(bank: BankId, position: number, useAlternate = false) {
+  const entry = (useAlternate ? ALTERNATES[bank][position] : undefined) ?? TYPED_BANKS[bank][position];
+  const [concept, scenario, question, explanation, key] = entry;
   const type: DailyQuestionType = key ? "SHORT_TEXT" : "SELF_REVIEW";
-  return { concept, scenario, question, explanation, type, accepted: key ? [key] : [] };
+  return { concept, scenario, question, explanation, format: FORMATS[position], type, accepted: key ? [key] : [] };
 }
 
 function firstNumber(value: string): number | null {

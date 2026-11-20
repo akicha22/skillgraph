@@ -127,6 +127,7 @@ candidateTasksRouter.get(
 
     let tasks = await tasksForDay(candidateId, today);
     let needsSkills = false;
+    let needsSupportedSkills = false;
 
     if (tasks.length === 0) {
       const skills = await prisma.candidateSkill.findMany({
@@ -139,7 +140,8 @@ candidateTasksRouter.get(
         dateKey: today,
         skills: skills.map((row) => row.skill),
       });
-      needsSkills = plans.length === 0;
+      needsSkills = skills.length === 0;
+      needsSupportedSkills = !needsSkills && plans.length === 0;
 
       if (plans.length > 0) {
         // Upserts on (candidate, day, position): two open tabs on the same day cannot duplicate a
@@ -238,6 +240,7 @@ candidateTasksRouter.get(
     res.json({
       day: today,
       needsSkills,
+      needsSupportedSkills,
       tasks: tasks.map(serializeTask),
       summary: {
         todayTotal: tasks.length,
