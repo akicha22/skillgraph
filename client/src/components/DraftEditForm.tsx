@@ -1,5 +1,9 @@
+import type { ReactNode } from "react";
+import { Button } from "./ui/Button";
+import { Alert, Card } from "./ui/Card";
+import { Field, Input, Select, Textarea } from "./ui/Field";
 import { useMemo, useState } from "react";
-import { AlertCircle, Save, X } from "lucide-react";
+import { Save, X } from "lucide-react";
 import { ApiError } from "../services/api";
 import { updateDraft } from "../services/assessments";
 import {
@@ -15,10 +19,30 @@ import {
 const LEVELS: AssessmentLevel[] = ["INTERN", "FRESHER", "JUNIOR", "MID", "SENIOR"];
 const DIFFICULTIES: AssessmentDifficulty[] = ["BEGINNER", "INTERMEDIATE", "ADVANCED"];
 
-const fieldClass =
-  "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200";
-const compactFieldClass =
-  "w-full rounded-lg border border-slate-300 px-2 py-1 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200";
+
+type DraftIssue = { field: string; message: string };
+
+function issueFor(issues: DraftIssue[], path: string) {
+  return issues.filter((issue) => issue.field.replace(/\[(\d+)\]/g, ".$1") === path).map((issue) => issue.message).join(" ");
+}
+
+function DraftField({ id, label, error, children }: {
+  id: string;
+  label: string;
+  error: string;
+  children: (attributes: { id: string; "aria-invalid"?: true; "aria-describedby": string }) => ReactNode;
+}) {
+  return (
+    <Field id={id} label={label}>
+      {(attributes) => (
+        <>
+          {children({ ...attributes, "aria-invalid": error ? true : undefined, "aria-describedby": `${id}-validation` })}
+          <p id={`${id}-validation`} aria-live="polite" tabIndex={error ? 0 : undefined} className="h-10 overflow-y-auto text-sm text-rose-700 wrap-break-word">{error}</p>
+        </>
+      )}
+    </Field>
+  );
+}
 
 type RubricRow = { name: string; description: string; maxMarks: number; privateGuidance: string };
 type TaskRow = {
@@ -205,25 +229,17 @@ export default function DraftEditForm({ draft, onSaved, onCancel }: Props) {
         void save();
       }}
     >
-      {error && (
-        <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-          <p className="flex items-start gap-2">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-            <span>{error}</span>
-          </p>
-          {issues.length > 0 && (
-            <ul className="mt-2 list-disc space-y-1 pl-8">
-              {issues.map((issue, index) => (
-                <li key={`${issue.field}-${index}`}>
-                  <span className="font-medium">{issue.field}:</span> {issue.message}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      <div className="h-20 overflow-y-auto" tabIndex={error ? 0 : undefined}>
+        {error && (
+          <Alert tone="error" heading={error}>
+            {issues.length > 0 && <ul className="list-disc space-y-1 pl-5">
+              {issues.map((issue, index) => <li key={`${issue.field}-${index}`}><span className="font-medium">{issue.field}:</span> {issue.message}</li>)}
+            </ul>}
+          </Alert>
+        )}
+      </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+      <Card>
         <h2 className="text-lg font-semibold text-slate-900">Assessment details</h2>
         <p className="text-sm text-slate-600">
           Marks must total 100, skill weights must total 100, and each rubric must add up to its task's marks. The
@@ -231,104 +247,83 @@ export default function DraftEditForm({ draft, onSaved, onCancel }: Props) {
         </p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <label htmlFor="draft-title" className="text-sm font-medium text-slate-800">
-              Title
-            </label>
-            <input
-              id="draft-title"
+            <DraftField id="draft-title" label="Title" error={issueFor(issues, "title")}>
+              {(attributes) => <Input {...attributes}
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              className={fieldClass}
-            />
+            />}
+            </DraftField>
           </div>
           <div className="sm:col-span-2">
-            <label htmlFor="draft-description" className="text-sm font-medium text-slate-800">
-              Description
-            </label>
-            <textarea
-              id="draft-description"
+            <DraftField id="draft-description" label="Description" error={issueFor(issues, "description")}>
+              {(attributes) => <Textarea {...attributes}
               rows={2}
               value={description}
               onChange={(event) => setDescription(event.target.value)}
-              className={fieldClass}
-            />
+            />}
+            </DraftField>
           </div>
           <div className="sm:col-span-2">
-            <label htmlFor="draft-context" className="text-sm font-medium text-slate-800">
-              Context shown to candidates
-            </label>
-            <textarea
-              id="draft-context"
+            <DraftField id="draft-context" label="Context shown to candidates" error={issueFor(issues, "jobContext")}>
+              {(attributes) => <Textarea {...attributes}
               rows={3}
               value={jobContext}
               onChange={(event) => setJobContext(event.target.value)}
-              className={fieldClass}
-            />
+            />}
+            </DraftField>
           </div>
           <div className="sm:col-span-2">
-            <label htmlFor="draft-instructions" className="text-sm font-medium text-slate-800">
-              Candidate instructions
-            </label>
-            <textarea
-              id="draft-instructions"
+            <DraftField id="draft-instructions" label="Candidate instructions" error={issueFor(issues, "candidateInstructions")}>
+              {(attributes) => <Textarea {...attributes}
               rows={4}
               value={candidateInstructions}
               onChange={(event) => setCandidateInstructions(event.target.value)}
-              className={fieldClass}
-            />
+            />}
+            </DraftField>
           </div>
           <div>
-            <label htmlFor="draft-level" className="text-sm font-medium text-slate-800">
-              Target level
-            </label>
-            <select
-              id="draft-level"
+            <DraftField id="draft-level" label="Target level" error={issueFor(issues, "targetLevel")}>
+              {(attributes) => <Select {...attributes}
               value={level}
               onChange={(event) => setLevel(event.target.value as AssessmentLevel)}
-              className={fieldClass}
             >
               {LEVELS.map((value) => (
                 <option key={value} value={value}>
                   {LEVEL_LABELS[value]}
                 </option>
               ))}
-            </select>
+            </Select>}
+            </DraftField>
           </div>
           <div>
-            <label htmlFor="draft-difficulty" className="text-sm font-medium text-slate-800">
-              Difficulty
-            </label>
-            <select
-              id="draft-difficulty"
+            <DraftField id="draft-difficulty" label="Difficulty" error={issueFor(issues, "difficulty")}>
+              {(attributes) => <Select {...attributes}
               value={difficulty}
               onChange={(event) => setDifficulty(event.target.value as AssessmentDifficulty)}
-              className={fieldClass}
             >
               {DIFFICULTIES.map((value) => (
                 <option key={value} value={value}>
                   {DIFFICULTY_LABELS[value]}
                 </option>
               ))}
-            </select>
+            </Select>}
+            </DraftField>
           </div>
           <div className="sm:col-span-2">
-            <label htmlFor="draft-ai-policy" className="text-sm font-medium text-slate-800">
-              AI assistants during the assessment
-            </label>
-            <select
-              id="draft-ai-policy"
+            <DraftField id="draft-ai-policy" label="AI assistants during the assessment" error={issueFor(issues, "aiPolicy")}>
+              {(attributes) => <Select {...attributes}
               value={aiPolicy}
               onChange={(event) => setAiPolicy(event.target.value as AiPolicy)}
-              className={fieldClass}
             >
               <option value="NOT_ALLOWED">Not allowed</option>
               <option value="ALLOWED_DISCLOSED">Allowed if disclosed</option>
-            </select>
+            </Select>}
+            </DraftField>
           </div>
         </div>
-      </section>
+      </Card>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+      <Card>
         <h2 className="text-lg font-semibold text-slate-900">Skill weights</h2>
         <p className="text-sm text-slate-600">Skills cannot be added here — regenerate a draft to change the set.</p>
         <table className="mt-3 w-full text-left text-sm">
@@ -339,11 +334,12 @@ export default function DraftEditForm({ draft, onSaved, onCancel }: Props) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {draft.skills.map((skill) => (
+            {draft.skills.map((skill, skillIndex) => (
               <tr key={skill.skillSlug}>
                 <td className="py-2 font-medium text-slate-900">{skill.name}</td>
                 <td className="py-2 text-right">
-                  <input
+                  <DraftField id={`draft-weight-${skill.skillSlug}`} label={`Weight for ${skill.name}`} error={issueFor(issues, `skills.${skillIndex}.weight`)}>
+                    {(attributes) => <Input {...attributes}
                     type="number"
                     min={1}
                     max={100}
@@ -355,8 +351,9 @@ export default function DraftEditForm({ draft, onSaved, onCancel }: Props) {
                       }))
                     }
                     aria-label={`Weight for ${skill.name}`}
-                    className={`${compactFieldClass} w-20 text-right`}
-                  />
+                    className="w-24 text-right"
+                  />}
+                  </DraftField>
                 </td>
               </tr>
             ))}
@@ -374,13 +371,13 @@ export default function DraftEditForm({ draft, onSaved, onCancel }: Props) {
             </tr>
           </tfoot>
         </table>
-      </section>
+      </Card>
 
       {tasks.map((task, index) => {
         const original = draft.tasks[index];
         const rubricTotal = task.rubric.reduce((sum, criterion) => sum + criterion.maxMarks, 0);
         return (
-          <section key={task.id} className="rounded-2xl border border-slate-200 bg-white p-6">
+          <Card key={task.id}>
             <header className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="text-lg font-semibold text-slate-900">
                 Task {index + 1} — {original?.skillName ?? task.title}
@@ -390,36 +387,27 @@ export default function DraftEditForm({ draft, onSaved, onCancel }: Props) {
 
             <div className="mt-4 grid gap-4 sm:grid-cols-[3fr_1fr_1fr]">
               <div>
-                <label htmlFor={`task-title-${task.id}`} className="text-sm font-medium text-slate-800">
-                  Task title
-                </label>
-                <input
-                  id={`task-title-${task.id}`}
+                <DraftField id={`task-title-${task.id}`} label="Task title" error={issueFor(issues, `tasks.${index}.title`)}>
+              {(attributes) => <Input {...attributes}
                   value={task.title}
                   onChange={(event) => patchTask(task.id, { title: event.target.value })}
-                  className={fieldClass}
-                />
+                />}
+            </DraftField>
               </div>
               <div>
-                <label htmlFor={`task-marks-${task.id}`} className="text-sm font-medium text-slate-800">
-                  Marks
-                </label>
-                <input
-                  id={`task-marks-${task.id}`}
+                <DraftField id={`task-marks-${task.id}`} label="Marks" error={issueFor(issues, `tasks.${index}.marks`)}>
+              {(attributes) => <Input {...attributes}
                   type="number"
                   min={1}
                   max={100}
                   value={task.marks}
                   onChange={(event) => patchTask(task.id, { marks: toInt(event.target.value, task.marks, 1, 100) })}
-                  className={fieldClass}
-                />
+                />}
+            </DraftField>
               </div>
               <div>
-                <label htmlFor={`task-minutes-${task.id}`} className="text-sm font-medium text-slate-800">
-                  Minutes
-                </label>
-                <input
-                  id={`task-minutes-${task.id}`}
+                <DraftField id={`task-minutes-${task.id}`} label="Minutes" error={issueFor(issues, `tasks.${index}.timeMinutes`)}>
+              {(attributes) => <Input {...attributes}
                   type="number"
                   min={1}
                   max={240}
@@ -427,22 +415,19 @@ export default function DraftEditForm({ draft, onSaved, onCancel }: Props) {
                   onChange={(event) =>
                     patchTask(task.id, { timeMinutes: toInt(event.target.value, task.timeMinutes, 1, 240) })
                   }
-                  className={fieldClass}
-                />
+                />}
+            </DraftField>
               </div>
             </div>
 
             <div className="mt-4">
-              <label htmlFor={`task-prompt-${task.id}`} className="text-sm font-medium text-slate-800">
-                Prompt shown to the candidate
-              </label>
-              <textarea
-                id={`task-prompt-${task.id}`}
+              <DraftField id={`task-prompt-${task.id}`} label="Prompt shown to the candidate" error={issueFor(issues, `tasks.${index}.prompt`)}>
+              {(attributes) => <Textarea {...attributes}
                 rows={5}
                 value={task.prompt}
                 onChange={(event) => patchTask(task.id, { prompt: event.target.value })}
-                className={fieldClass}
-              />
+              />}
+            </DraftField>
             </div>
 
             <div className="mt-5">
@@ -457,30 +442,18 @@ export default function DraftEditForm({ draft, onSaved, onCancel }: Props) {
                   <div key={criterionIndex} className="rounded-xl border border-slate-200 p-3">
                     <div className="grid gap-2 sm:grid-cols-[3fr_1fr]">
                       <div>
-                        <label
-                          htmlFor={`criterion-name-${task.id}-${criterionIndex}`}
-                          className="text-xs text-slate-500"
-                        >
-                          Criterion
-                        </label>
-                        <input
-                          id={`criterion-name-${task.id}-${criterionIndex}`}
+                        <DraftField id={`criterion-name-${task.id}-${criterionIndex}`} label="Criterion" error={issueFor(issues, `tasks.${index}.rubric.${criterionIndex}.name`)}>
+              {(attributes) => <Input {...attributes}
                           value={criterion.name}
                           onChange={(event) =>
                             patchCriterion(task.id, criterionIndex, { name: event.target.value })
                           }
-                          className={`mt-1 ${compactFieldClass}`}
-                        />
+                        />}
+            </DraftField>
                       </div>
                       <div>
-                        <label
-                          htmlFor={`criterion-marks-${task.id}-${criterionIndex}`}
-                          className="text-xs text-slate-500"
-                        >
-                          Marks
-                        </label>
-                        <input
-                          id={`criterion-marks-${task.id}-${criterionIndex}`}
+                        <DraftField id={`criterion-marks-${task.id}-${criterionIndex}`} label="Marks" error={issueFor(issues, `tasks.${index}.rubric.${criterionIndex}.maxMarks`)}>
+              {(attributes) => <Input {...attributes}
                           type="number"
                           min={1}
                           max={100}
@@ -490,49 +463,37 @@ export default function DraftEditForm({ draft, onSaved, onCancel }: Props) {
                               maxMarks: toInt(event.target.value, criterion.maxMarks, 1, 100),
                             })
                           }
-                          className={`mt-1 ${compactFieldClass}`}
-                        />
+                        />}
+            </DraftField>
                       </div>
                     </div>
-                    <label
-                      htmlFor={`criterion-description-${task.id}-${criterionIndex}`}
-                      className="mt-2 block text-xs text-slate-500"
-                    >
-                      What is checked
-                    </label>
-                    <textarea
-                      id={`criterion-description-${task.id}-${criterionIndex}`}
+                    <DraftField id={`criterion-description-${task.id}-${criterionIndex}`} label="What is checked" error={issueFor(issues, `tasks.${index}.rubric.${criterionIndex}.description`)}>
+              {(attributes) => <Textarea {...attributes}
                       rows={2}
                       value={criterion.description}
                       onChange={(event) =>
                         patchCriterion(task.id, criterionIndex, { description: event.target.value })
                       }
-                      className={`mt-1 ${compactFieldClass}`}
-                    />
-                    <label
-                      htmlFor={`criterion-guidance-${task.id}-${criterionIndex}`}
-                      className="mt-2 block text-xs text-slate-500"
-                    >
-                      Recruiter-only marking guidance
-                    </label>
-                    <textarea
-                      id={`criterion-guidance-${task.id}-${criterionIndex}`}
+                    />}
+            </DraftField>
+                    <DraftField id={`criterion-guidance-${task.id}-${criterionIndex}`} label="Recruiter-only marking guidance" error={issueFor(issues, `tasks.${index}.rubric.${criterionIndex}.privateGuidance`)}>
+              {(attributes) => <Textarea {...attributes}
                       rows={2}
                       value={criterion.privateGuidance}
                       onChange={(event) =>
                         patchCriterion(task.id, criterionIndex, { privateGuidance: event.target.value })
                       }
-                      className={`mt-1 ${compactFieldClass}`}
-                    />
+                    />}
+            </DraftField>
                   </div>
                 ))}
               </div>
             </div>
-          </section>
+          </Card>
         );
       })}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+      <Card>
         <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
           <p className={`font-medium ${marksTotal === 100 ? "text-emerald-600" : "text-rose-600"}`}>
             {marksTotal} of 100 marks across {tasks.length} tasks
@@ -540,25 +501,25 @@ export default function DraftEditForm({ draft, onSaved, onCancel }: Props) {
           <p className="text-slate-600">Total time {minutesTotal} min — the sum of the task minutes above.</p>
         </div>
         <div className="mt-4 flex flex-wrap justify-end gap-2">
-          <button
+          <Button
             type="button"
             onClick={onCancel}
             disabled={saving}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+            variant="secondary"
           >
             <X className="h-4 w-4" aria-hidden />
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="submit"
             disabled={saving}
-            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+            variant="primary"
           >
             <Save className="h-4 w-4" aria-hidden />
             {saving ? "Saving…" : "Save draft"}
-          </button>
+          </Button>
         </div>
-      </section>
+      </Card>
     </form>
   );
 }

@@ -1,6 +1,10 @@
+import { Button } from "./ui/Button";
+import { Alert, Badge, Card } from "./ui/Card";
+import { Input, Select, Textarea } from "./ui/Field";
+import { Skeleton } from "./ui/Feedback";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertCircle, ArrowLeft, ArrowRight, Scale, Sparkles, Wand2 } from "lucide-react";
+import { ArrowLeft, Check, Circle, CircleDot, ArrowRight, Scale, Sparkles, Wand2 } from "lucide-react";
 import DashboardLayout from "../layouts/DashboardLayout";
 import SkillPicker from "./SkillPicker";
 import { useSkillLibrary } from "../hooks/useSkillLibrary";
@@ -28,8 +32,6 @@ type SelectedSkill = { skillSlug: string; name: string; weight: number; source: 
 
 const MAX_SKILLS = 8;
 
-const fieldClass =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200";
 
 function distributeWeights(rows: SelectedSkill[]): SelectedSkill[] {
   if (rows.length === 0) return rows;
@@ -247,7 +249,7 @@ export default function AssessmentWizard() {
 
   return (
     <DashboardLayout>
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+      <Card>
         <h1 className="text-2xl font-semibold text-slate-900">New assessment</h1>
         <p className="mt-1 text-slate-600">
           Describe the role, confirm the skills, and SkillGraph builds a draft with computed tasks, marks and rubrics.
@@ -261,41 +263,33 @@ export default function AssessmentWizard() {
               <li
                 key={label}
                 aria-current={state === "current" ? "step" : undefined}
-                className={`rounded-full px-3 py-1 ${
-                  state === "current"
-                    ? "bg-indigo-600 text-white"
-                    : state === "done"
-                      ? "bg-indigo-50 text-indigo-700"
-                      : "bg-slate-100 text-slate-500"
-                }`}
+                className="min-w-0"
               >
-                {number}. {label}
+                <Badge tone={state === "current" ? "brand" : state === "done" ? "success" : "neutral"} className="items-center gap-1.5">
+                  {state === "current" ? <CircleDot aria-hidden="true" className="size-4" /> : state === "done" ? <Check aria-hidden="true" className="size-4" /> : <Circle aria-hidden="true" className="size-4" />}
+                  {number}. {label} · {state === "current" ? "Current" : state === "done" ? "Done" : "Upcoming"}
+                </Badge>
               </li>
             );
           })}
         </ol>
-      </section>
+      </Card>
 
-      {error && (
-        <p role="alert" className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          <span>{error}</span>
-        </p>
-      )}
+      {error && <Alert tone="error">{error}</Alert>}
 
       {step === 1 && (
-        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6">
+        <Card className="space-y-4">
           <div>
             <label htmlFor="brief" className="text-sm font-medium text-slate-800">
               What are you hiring for?
             </label>
-            <textarea
+            <Textarea
               id="brief"
               rows={6}
               value={requirementsText}
               onChange={(e) => setRequirementsText(e.target.value)}
               placeholder="We need a junior operations associate who can analyse sales data in Excel, handle client emails and negotiate basic supplier terms. Around 45 minutes, three tasks."
-              className={`mt-1 ${fieldClass}`}
+              className="mt-1"
             />
             <p className="mt-1 text-xs text-slate-500">
               Skills, duration and task count are read from this text. You can change everything in the next steps.
@@ -306,43 +300,44 @@ export default function AssessmentWizard() {
               <label htmlFor="company" className="text-sm font-medium text-slate-800">
                 Company <span className="text-rose-600">*</span>
               </label>
-              <input
+              <Input
                 id="company"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
                 placeholder="Northline Trading"
-                className={`mt-1 ${fieldClass}`}
+                className="mt-1"
               />
             </div>
             <div>
               <label htmlFor="jobTitle" className="text-sm font-medium text-slate-800">
                 Job title <span className="text-slate-400">(optional)</span>
               </label>
-              <input
+              <Input
                 id="jobTitle"
                 value={jobTitle}
                 onChange={(e) => setJobTitle(e.target.value)}
                 placeholder="Read from the brief if left empty"
-                className={`mt-1 ${fieldClass}`}
+                className="mt-1"
               />
             </div>
           </div>
-          <div className="flex justify-end">
-            <button
+          <div className="sticky bottom-[calc(7rem+env(safe-area-inset-bottom))] z-10 flex flex-wrap items-center gap-2 rounded-control border border-slate-200 bg-white p-2 shadow-raised md:static md:border-0 md:p-0 md:shadow-none justify-end">
+            <Button
               type="button"
               onClick={() => void readBrief()}
               disabled={busy}
-              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+              loading={busy}
+              variant="primary"
             >
               <Sparkles className="h-4 w-4" aria-hidden />
               {busy ? "Reading the brief…" : "Read the brief"}
-            </button>
+            </Button>
           </div>
-        </section>
+        </Card>
       )}
 
       {step === 2 && (
-        <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6">
+        <Card className="space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Skills and weights</h2>
@@ -350,15 +345,15 @@ export default function AssessmentWizard() {
                 Weights decide how much of the 100 marks each skill carries.
               </p>
             </div>
-            <button
+            <Button
               type="button"
               onClick={() => setSelected((rows) => distributeWeights(rows))}
               disabled={selected.length === 0}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+              variant="secondary"
             >
               <Scale className="h-4 w-4" aria-hidden />
               Distribute evenly
-            </button>
+            </Button>
           </div>
 
           {parsed && parsed.notes.length > 0 && (
@@ -391,7 +386,7 @@ export default function AssessmentWizard() {
                       {skill.source === "SUGGESTED_APPROVED" ? "Suggested" : "Requested"}
                     </td>
                     <td className="py-2 text-right">
-                      <input
+                      <Input
                         type="number"
                         min={1}
                         max={100}
@@ -402,13 +397,13 @@ export default function AssessmentWizard() {
                       />
                     </td>
                     <td className="py-2 text-right">
-                      <button
+                      <Button
                         type="button"
                         onClick={() => setSelected((rows) => rows.filter((row) => row.skillSlug !== skill.skillSlug))}
-                        className="text-sm font-medium text-rose-600 hover:underline"
+                        variant="secondary"
                       >
                         Remove
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -445,30 +440,30 @@ export default function AssessmentWizard() {
             )}
           </div>
 
-          <div className="flex items-center justify-between">
-            <button
+          <div className="sticky bottom-[calc(7rem+env(safe-area-inset-bottom))] z-10 flex flex-wrap items-center gap-2 rounded-control border border-slate-200 bg-white p-2 shadow-raised md:static md:border-0 md:p-0 md:shadow-none justify-between">
+            <Button
               type="button"
               onClick={() => setStep(1)}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              variant="secondary"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden />
               Back
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={goToSettings}
               disabled={!skillsValid}
-              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+              variant="primary"
             >
               Continue
               <ArrowRight className="h-4 w-4" aria-hidden />
-            </button>
+            </Button>
           </div>
-        </section>
+        </Card>
       )}
 
       {step === 3 && (
-        <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6">
+        <Card className="space-y-5">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Assessment settings</h2>
             <p className="text-sm text-slate-600">
@@ -480,62 +475,62 @@ export default function AssessmentWizard() {
               <label htmlFor="level" className="text-sm font-medium text-slate-800">
                 Target level
               </label>
-              <select
+              <Select
                 id="level"
                 value={level}
                 onChange={(e) => setLevel(e.target.value as AssessmentLevel)}
-                className={`mt-1 ${fieldClass}`}
+                className="mt-1"
               >
                 {LEVELS.map((value) => (
                   <option key={value} value={value}>
                     {LEVEL_LABELS[value]}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div>
               <label htmlFor="difficulty" className="text-sm font-medium text-slate-800">
                 Difficulty
               </label>
-              <select
+              <Select
                 id="difficulty"
                 value={difficulty}
                 onChange={(e) => setDifficulty(e.target.value as AssessmentDifficulty)}
-                className={`mt-1 ${fieldClass}`}
+                className="mt-1"
               >
                 {DIFFICULTIES.map((value) => (
                   <option key={value} value={value}>
                     {DIFFICULTY_LABELS[value]}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div>
               <label htmlFor="duration" className="text-sm font-medium text-slate-800">
                 Total minutes
               </label>
-              <input
+              <Input
                 id="duration"
                 type="number"
                 min={10}
                 max={240}
                 value={durationMinutes}
                 onChange={(e) => setDurationMinutes(Number(e.target.value))}
-                className={`mt-1 ${fieldClass}`}
+                className="mt-1"
               />
             </div>
             <div>
               <label htmlFor="taskCount" className="text-sm font-medium text-slate-800">
                 Number of tasks
               </label>
-              <input
+              <Input
                 id="taskCount"
                 type="number"
                 min={selected.length}
                 max={8}
                 value={taskCount}
                 onChange={(e) => setTaskCount(Number(e.target.value))}
-                className={`mt-1 ${fieldClass}`}
+                className="mt-1"
               />
               <p className="mt-1 text-xs text-slate-500">At least one task per skill ({selected.length}).</p>
             </div>
@@ -569,30 +564,30 @@ export default function AssessmentWizard() {
               </label>
             </div>
           </fieldset>
-          <div className="flex items-center justify-between">
-            <button
+          <div className="sticky bottom-[calc(7rem+env(safe-area-inset-bottom))] z-10 flex flex-wrap items-center gap-2 rounded-control border border-slate-200 bg-white p-2 shadow-raised md:static md:border-0 md:p-0 md:shadow-none justify-between">
+            <Button
               type="button"
               onClick={() => setStep(2)}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              variant="secondary"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden />
               Back
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={() => setStep(4)}
               disabled={!taskCountValid}
-              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+              variant="primary"
             >
               Continue
               <ArrowRight className="h-4 w-4" aria-hidden />
-            </button>
+            </Button>
           </div>
-        </section>
+        </Card>
       )}
 
       {step === 4 && (
-        <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6">
+        <Card className="space-y-5">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Review</h2>
             <p className="text-sm text-slate-600">Generating creates version 1 of a draft you can still change.</p>
@@ -643,26 +638,28 @@ export default function AssessmentWizard() {
               </div>
             )}
           </dl>
-          <div className="flex items-center justify-between">
-            <button
+          {busy && <div role="status" className="space-y-2"><p className="text-sm font-medium">Generating your draft…</p><Skeleton className="h-6 w-2/3" /><Skeleton className="h-20" /></div>}
+          <div className="sticky bottom-[calc(7rem+env(safe-area-inset-bottom))] z-10 flex flex-wrap items-center gap-2 rounded-control border border-slate-200 bg-white p-2 shadow-raised md:static md:border-0 md:p-0 md:shadow-none justify-between">
+            <Button
               type="button"
               onClick={() => setStep(3)}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              variant="secondary"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden />
               Back
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={() => void submit()}
               disabled={busy}
-              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+              loading={busy}
+              variant="primary"
             >
               <Wand2 className="h-4 w-4" aria-hidden />
               {busy ? "Generating…" : "Generate assessment"}
-            </button>
+            </Button>
           </div>
-        </section>
+        </Card>
       )}
       {clarifyQuestions.length > 0 && (
         <div
@@ -684,34 +681,34 @@ export default function AssessmentWizard() {
                 <label key={question.id} className="block text-sm">
                   <span className="font-medium text-slate-900">{question.question}</span>
                   <span className="mt-0.5 block text-xs text-slate-500">{question.why}</span>
-                  <input
+                  <Input
                     value={clarifyDrafts[question.id] ?? ""}
                     onChange={(event) =>
                       setClarifyDrafts((prev) => ({ ...prev, [question.id]: event.target.value }))
                     }
                     maxLength={500}
                     placeholder={question.placeholder}
-                    className={`mt-1 ${fieldClass}`}
+                    className="mt-1"
                   />
                 </label>
               ))}
             </div>
             <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-              <button
+              <Button
                 type="button"
                 onClick={() => continuePastClarifications(true)}
-                className="text-sm font-medium text-slate-500 hover:text-slate-800"
+                variant="secondary"
               >
                 Skip these
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 onClick={() => continuePastClarifications(false)}
-                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                variant="primary"
               >
                 Continue
                 <ArrowRight className="h-4 w-4" aria-hidden />
-              </button>
+              </Button>
             </div>
           </div>
         </div>
