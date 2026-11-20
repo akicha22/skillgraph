@@ -1,5 +1,9 @@
+import { Button } from "./ui/Button";
+import { Badge, Card } from "./ui/Card";
+import { EmptyState } from "./ui/Feedback";
+import { Input, Select } from "./ui/Field";
 import { useMemo, useState } from "react";
-import { Check, Search } from "lucide-react";
+import { Check, Search, X } from "lucide-react";
 import type { AssessmentType, SkillDomain } from "../types/skills";
 
 const TYPE_LABELS: Record<AssessmentType, string> = {
@@ -50,22 +54,22 @@ export default function SkillPicker({ domains, selectedIds, onChange, max }: Pro
   return (
     <div>
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-56 flex-1">
-          <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" aria-hidden />
-          <input
+        <div className="relative min-w-0 basis-full sm:flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-600" aria-hidden />
+          <Input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search skills, e.g. Excel, negotiation, drawing"
             aria-label="Search skills"
-            className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+            className="pl-9"
           />
         </div>
-        <select
+        <Select
           value={domainSlug}
           onChange={(e) => setDomainSlug(e.target.value)}
           aria-label="Filter by domain"
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+          className="sm:w-auto"
         >
           <option value="all">All domains</option>
           {domains.map((d) => (
@@ -73,7 +77,7 @@ export default function SkillPicker({ domains, selectedIds, onChange, max }: Pro
               {d.name}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       <div className="mt-3 flex items-center justify-between text-sm text-slate-500">
@@ -81,14 +85,27 @@ export default function SkillPicker({ domains, selectedIds, onChange, max }: Pro
           {selectedIds.length} selected{max !== undefined ? ` (up to ${max})` : ""}
         </span>
         {selectedIds.length > 0 && (
-          <button type="button" onClick={() => onChange([])} className="font-medium text-indigo-600 hover:underline">
+          <Button variant="ghost" size="sm" onClick={() => onChange([])}>
             Clear selection
-          </button>
+          </Button>
         )}
       </div>
 
+      {selectedIds.length > 0 && (
+        <ul aria-label="Selected skills" className="mt-2 flex flex-wrap gap-2">
+          {domains.flatMap((domain) => domain.skills.filter((skill) => selected.has(skill.id)).map((skill) => (
+            <li key={skill.id} className="inline-flex max-w-full items-center rounded-full bg-brand-50 pl-3 text-sm text-brand-900">
+              <span className="min-w-0 wrap-break-word">{skill.name}</span>
+              <Button variant="ghost" size="sm" className="shrink-0" aria-label={`Remove ${skill.name}`} onClick={() => toggle(skill.id)}>
+                <X aria-hidden="true" className="size-4" />
+              </Button>
+            </li>
+          )))}
+        </ul>
+      )}
+
       {visible.length === 0 && (
-        <p className="mt-8 text-center text-sm text-slate-500">No skills match your search.</p>
+        <EmptyState title="No skills match your search." text="Try another search term or domain." />
       )}
 
       <div className="mt-4 space-y-8">
@@ -100,34 +117,34 @@ export default function SkillPicker({ domains, selectedIds, onChange, max }: Pro
                 const isSelected = selected.has(s.id);
                 const blocked = atLimit && !isSelected;
                 return (
-                  <button
+                  <Card interactive
                     key={s.id}
                     type="button"
                     onClick={() => toggle(s.id)}
                     aria-pressed={isSelected}
                     disabled={blocked}
-                    className={`rounded-xl border p-4 text-left transition ${
+                    className={`w-full p-4 text-left ${
                       isSelected
-                        ? "border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500"
+                        ? "border-brand-500 bg-brand-50 ring-1 ring-brand-500"
                         : "border-slate-200 bg-white hover:border-slate-300"
                     } ${blocked ? "cursor-not-allowed opacity-50" : ""}`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <span className="font-medium text-slate-900">{s.name}</span>
-                      {isSelected && <Check className="h-4 w-4 shrink-0 text-indigo-600" aria-hidden />}
+                      {isSelected && <Check className="h-4 w-4 shrink-0 text-brand-700" aria-hidden />}
                     </div>
                     <p className="mt-1 text-sm text-slate-600">{s.description}</p>
                     <div className="mt-3 flex flex-wrap items-center gap-1.5">
                       {s.assessmentTypes.map((t) => (
-                        <span key={t} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                        <Badge key={t}>
                           {TYPE_LABELS[t]}
-                        </span>
+                        </Badge>
                       ))}
                       {s.subskills.length > 0 && (
-                        <span className="text-xs text-slate-400">{s.subskills.length} subskills</span>
+                        <span className="text-xs text-slate-600">{s.subskills.length} subskills</span>
                       )}
                     </div>
-                  </button>
+                  </Card>
                 );
               })}
             </div>

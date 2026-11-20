@@ -1,3 +1,5 @@
+import { Button } from "../components/ui/Button";
+import { Card } from "../components/ui/Card";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, ChevronRight, Eye, FileText, GitBranch, Lock, Pencil, Send } from "lucide-react";
@@ -78,7 +80,7 @@ function TaskCard({ task }: { task: DraftTask }) {
       </summary>
 
       <div className="space-y-4 border-t border-slate-100 px-5 pb-5 pt-4">
-        <p className="whitespace-pre-line text-sm text-slate-700">{task.prompt}</p>
+        <p className="max-w-[65ch] whitespace-pre-line text-base leading-relaxed text-slate-700">{task.prompt}</p>
 
         {hasPublicData && (
           <Disclosure label="Data given to the candidate" icon={<Eye className="h-3.5 w-3.5 shrink-0" aria-hidden />}>
@@ -314,7 +316,7 @@ function DraftView({ assessmentId, versionId }: { assessmentId: string; versionI
 
   return (
     <DashboardLayout>
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+      <Card>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs uppercase tracking-wide text-slate-500">
@@ -330,7 +332,7 @@ function DraftView({ assessmentId, versionId }: { assessmentId: string; versionI
                 {draft.status === "PUBLISHED" ? "Published" : "Draft"}
               </StatusBadge>
               <StatusBadge tone="neutral">
-                {METHOD_LABELS[draft.generationMethod] ?? draft.generationMethod}
+                {draft.generationMethod === "TEMPLATE" ? "Template output" : (METHOD_LABELS[draft.generationMethod] ?? draft.generationMethod)}
               </StatusBadge>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -346,18 +348,6 @@ function DraftView({ assessmentId, versionId }: { assessmentId: string; versionI
                 >
                   <Pencil className="h-4 w-4" aria-hidden />
                   Edit draft
-                </button>
-              )}
-              {draft.editable && (
-                <button
-                  type="button"
-                  onClick={() => void publish()}
-                  disabled={busyAction !== null || editing}
-                  title={editing ? "Save or cancel your edits first" : undefined}
-                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  <Send className="h-4 w-4" aria-hidden />
-                  {busyAction === "publish" ? "Publishing…" : "Publish version"}
                 </button>
               )}
               {!draft.editable && (
@@ -420,9 +410,9 @@ function DraftView({ assessmentId, versionId }: { assessmentId: string; versionI
               : `Published${draft.publishedAt ? ` on ${new Date(draft.publishedAt).toLocaleDateString()}` : ""} and read-only — attempts are scored against these exact criteria. Create a new version to make changes.`}
           </span>
         </p>
-      </section>
+      </Card>
 
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         {editing ? (
           <DraftEditForm draft={draft} onSaved={handleSaved} onCancel={() => setEditing(false)} />
         ) : (
@@ -591,6 +581,22 @@ function DraftView({ assessmentId, versionId }: { assessmentId: string; versionI
           </Link>
         </aside>
       </div>
+              {draft.editable && (
+        <Card className="sticky bottom-[calc(7rem+env(safe-area-inset-bottom))] z-20 flex flex-wrap items-center justify-between gap-3 p-3 shadow-raised sm:p-4 md:bottom-4">
+          <p className="text-sm font-semibold">Approve and publish</p>
+                <Button
+                  type="button"
+                  onClick={() => void publish()}
+                  disabled={busyAction !== null || editing}
+                  loading={busyAction === "publish"}
+                  title={editing ? "Save or cancel your edits first" : undefined}
+                  variant="primary"
+                >
+                  <Send className="h-4 w-4" aria-hidden />
+                  {busyAction === "publish" ? "Publishing…" : "Approve and publish"}
+                </Button>
+        </Card>
+      )}
     </DashboardLayout>
   );
 }

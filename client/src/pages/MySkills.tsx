@@ -1,3 +1,6 @@
+import { Alert, Badge, Card } from "../components/ui/Card";
+import { Button } from "../components/ui/Button";
+import { EmptyState, Skeleton } from "../components/ui/Feedback";
 import { useEffect, useState } from "react";
 import SkillPicker from "../components/SkillPicker";
 import { useSkillLibrary } from "../hooks/useSkillLibrary";
@@ -54,38 +57,47 @@ export default function MySkills() {
 
   return (
     <DashboardLayout>
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
-        <h1 className="text-2xl font-semibold text-slate-900">My skills</h1>
+      <header>
+        <h1 className="text-[1.75rem] font-semibold tracking-tight text-slate-900">My skills</h1>
         <p className="mt-1 text-slate-600">
           Choose the skills you want to be known for. These are <strong>self-declared</strong>: they show what
           you say you can do. Verified results appear on your profile only after you complete assessments.
         </p>
-      </section>
+      </header>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
-        {loading && <p className="text-slate-500">Loading skills…</p>}
-        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <Card>
+        {loading && !error && <div role="status" className="space-y-3"><span className="sr-only">Loading skills…</span><Skeleton className="h-11" /><Skeleton className="h-24" /></div>}
+        {error && <Alert tone="error">{error}</Alert>}
         {!loading && !error && (
           <SkillPicker domains={domains} selectedIds={selected} onChange={setSelected} max={MAX_SKILLS} />
         )}
-      </section>
+      </Card>
 
       {!loading && !error && (
-        <div className="sticky bottom-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-3 shadow-lg">
-          <span
-            className={`text-sm ${message ? (message.ok ? "text-emerald-700" : "text-red-700") : "text-slate-500"}`}
-            role="status"
-          >
-            {message ? message.text : dirty ? "You have unsaved changes." : "All changes saved."}
-          </span>
-          <button
-            onClick={() => void handleSave()}
-            disabled={!dirty || saving}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-          >
-            {saving ? "Saving…" : "Save skills"}
-          </button>
-        </div>
+        <section aria-labelledby="selected-skills" className="space-y-3">
+          <h2 id="selected-skills" className="text-xl font-semibold tracking-tight">Selected skills</h2>
+          {selected.length === 0 ? (
+            <Card><EmptyState title="No skills selected" text="Choose skills from the library above." /></Card>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {domains.flatMap((domain) => domain.skills.filter((skill) => selected.includes(skill.id)).map((skill) => (
+                <Card key={skill.id}>
+                  <Badge>{domain.name}</Badge>
+                  <h3 className="mt-2 font-semibold wrap-break-word">{skill.name}</h3>
+                  <p className="mt-1 text-sm text-slate-600">{skill.description}</p>
+                </Card>
+              )))}
+            </div>
+          )}
+          <Card className="flex flex-wrap items-center justify-between gap-3">
+            {message ? <Alert tone={message.ok ? "success" : "error"} role={message.ok ? "status" : undefined}>{message.text}</Alert> : (
+              <span role="status" className="text-sm text-slate-600">{dirty ? "You have unsaved changes." : "All changes saved."}</span>
+            )}
+            <Button onClick={() => void handleSave()} disabled={!dirty || saving} loading={saving}>
+              {saving ? "Saving…" : "Save skills"}
+            </Button>
+          </Card>
+        </section>
       )}
     </DashboardLayout>
   );

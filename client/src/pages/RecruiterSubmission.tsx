@@ -1,3 +1,7 @@
+import { Alert, Card } from "../components/ui/Card";
+import { ProgressBar, Skeleton } from "../components/ui/Feedback";
+import { Input } from "../components/ui/Field";
+import { Button } from "../components/ui/Button";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Clock, ListPlus } from "lucide-react";
@@ -156,9 +160,7 @@ export default function RecruiterSubmission() {
   if (loading) {
     return (
       <DashboardLayout>
-        <p className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
-          Loading submission…
-        </p>
+        <Card role="status" className="space-y-3"><span className="sr-only">Loading submission…</span><Skeleton className="h-8 w-1/2" /><Skeleton className="h-24" /></Card>
       </DashboardLayout>
     );
   }
@@ -261,13 +263,18 @@ export default function RecruiterSubmission() {
 
   return (
     <DashboardLayout>
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+      <Card>
         <p className="text-xs uppercase tracking-wide text-slate-500">
           {submission.assessment.companyName} · {submission.assessment.jobTitle}
         </p>
         <h1 className="mt-1 text-2xl font-bold text-slate-900">{submission.candidate.name}</h1>
         <p className="text-sm text-slate-600">{submission.candidate.email}</p>
         <p className="mt-2 text-sm text-slate-600">{submission.assessment.title}</p>
+        <div className="mt-4 max-w-sm rounded-control bg-slate-50 p-4 tabular-nums">
+          <p className="text-sm font-semibold text-slate-600">Total saved score</p>
+          <p className="text-3xl font-bold tracking-tight">{submission.score.awarded} <span className="text-lg font-medium text-slate-600">/ {submission.score.possible}</span></p>
+          {submission.score.possible > 0 && <ProgressBar className="mt-2" label="Total saved score" value={submission.score.awarded} max={submission.score.possible} />}
+        </div>
         <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-600">
           <span className="rounded-full bg-slate-100 px-2.5 py-0.5">
             {answered} of {submission.tasks.length} tasks answered
@@ -311,9 +318,9 @@ export default function RecruiterSubmission() {
           <ArrowLeft className="h-4 w-4" aria-hidden />
           Back to this version
         </Link>
-      </section>
+      </Card>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+      <Card>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
@@ -397,13 +404,13 @@ export default function RecruiterSubmission() {
         {shortlistSaved && (
           <p className="mt-2 text-sm text-emerald-700">Added to {shortlistSaved}.</p>
         )}
-      </section>
+      </Card>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+      <Card>
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total score</p>
-            <p className="mt-1 text-3xl font-bold text-slate-900">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Marking totals</p>
+            <p className="mt-1 text-3xl font-bold text-slate-900 tabular-nums">
               {pendingAwarded}
               <span className="ml-1 text-base font-medium text-slate-500">
                 / {submission.score.possible}
@@ -421,23 +428,19 @@ export default function RecruiterSubmission() {
             {scoresSaved && !unsavedScores && (
               <span className="text-xs text-emerald-700">Scores saved</span>
             )}
-            <button
-              onClick={() => void saveScores()}
-              disabled={savingScores}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
-            >
+            <Button onClick={() => void saveScores()} loading={savingScores}>
               {savingScores ? "Saving…" : "Save scores"}
-            </button>
+            </Button>
           </div>
         </div>
         <p className="mt-3 text-xs text-slate-500">
           Leave a box empty while you are still reading; only saved marks count towards the total.
         </p>
         {scoreError && <p className="mt-2 text-sm text-rose-700">{scoreError}</p>}
-      </section>
+      </Card>
 
       {submission.skills.length > 0 && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-6">
+        <Card>
           <h2 className="text-lg font-semibold text-slate-900">Skill evidence</h2>
           <p className="mt-1 max-w-3xl text-sm text-slate-600">
             Only criteria you have marked count towards a skill. Coverage shows how much of that
@@ -489,20 +492,19 @@ export default function RecruiterSubmission() {
               </Suspense>
             </div>
           </div>
-        </section>
+        </Card>
       )}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+      <Card>
         <h2 className="text-lg font-semibold text-slate-900">Activity</h2>
         <p className="mt-1 max-w-3xl text-sm text-slate-600">
           Recorded while the candidate was working: when each task was opened, how often it was
           saved, pastes and the times they left the tab. Only counts and times are stored — never
           the answer or the pasted text.
         </p>
-        <p className="mt-2 max-w-3xl rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
-          These are signals, not proof; paste or tab-switching is a reason to ask a follow-up
-          question, not a verdict.
-        </p>
+        <Alert heading="Activity: signal, not proof" className="mt-3 border-slate-200! bg-slate-50! text-slate-900!">
+          Paste or tab-switching is a reason to ask a follow-up question, not a verdict.
+        </Alert>
 
         {activityError ? (
           <p className="mt-3 text-sm text-rose-700">{activityError}</p>
@@ -598,10 +600,10 @@ export default function RecruiterSubmission() {
             </div>
           </>
         )}
-      </section>
+      </Card>
 
       {submission.followUpQuestions.length > 0 && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-6">
+        <Card>
           <h2 className="text-lg font-semibold text-slate-900">Interview follow-up questions</h2>
           <p className="mt-1 max-w-3xl text-sm text-slate-600">
             Taken from the lowest-scoring or still-unmarked criteria, one per task, so you can check
@@ -617,7 +619,7 @@ export default function RecruiterSubmission() {
                   {item.taskTitle} · {item.criterion} · {item.reason}
                 </p>
                 {item.candidateAnswer ? (
-                  <div className="mt-2 rounded-lg border border-slate-200 bg-white p-3">
+                  <Alert heading="Follow-up answer: signal, not proof" className="mt-2 border-slate-200! bg-slate-50! text-slate-900!">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                       Candidate&apos;s answer
                       {item.answerSavedAt
@@ -627,7 +629,7 @@ export default function RecruiterSubmission() {
                     <p className="mt-1 whitespace-pre-line text-sm text-slate-700">
                       {item.candidateAnswer}
                     </p>
-                  </div>
+                  </Alert>
                 ) : (
                   <p className="mt-2 text-xs text-slate-500">
                     The candidate has not written an answer to this one.
@@ -636,13 +638,13 @@ export default function RecruiterSubmission() {
               </li>
             ))}
           </ol>
-        </section>
+        </Card>
       )}
 
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-slate-900">Answers and marks</h2>
         {submission.tasks.map((task) => (
-          <article key={task.id} className="rounded-2xl border border-slate-200 bg-white p-6">
+          <Card key={task.id} className="wrap-break-word tabular-nums">
             <header className="flex flex-wrap items-baseline justify-between gap-2">
               <h3 className="text-lg font-bold text-slate-900">
                 {task.position + 1}. {task.title}
@@ -700,7 +702,8 @@ export default function RecruiterSubmission() {
               <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Criteria and marks
               </h4>
-              <table className="mt-2 w-full text-left text-sm">
+              <div className="mt-2 overflow-x-auto" role="region" aria-label="Rubric and marking controls" tabIndex={0}>
+              <table className="w-full min-w-[28rem] text-left text-sm tabular-nums">
                 <thead className="text-xs uppercase tracking-wide text-slate-500">
                   <tr>
                     <th scope="col" className="pb-1">
@@ -710,8 +713,9 @@ export default function RecruiterSubmission() {
                       What is checked
                     </th>
                     <th scope="col" className="pb-1 text-right">
-                      Score
+                      Saved marks
                     </th>
+                    <th scope="col" className="border-l border-slate-200 bg-slate-50 px-3 text-right">Marking controls</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -734,9 +738,10 @@ export default function RecruiterSubmission() {
                             </span>
                           )}
                         </td>
-                        <td className="py-2 pl-3">
-                          <div className="flex items-center justify-end gap-1">
-                            <input
+                        <td className="px-3 py-2 text-right align-top">{criterion.score ?? "—"} / {criterion.maxMarks}</td>
+                        <td className="border-l border-slate-200 bg-slate-50 p-2">
+                          <div className="flex items-center justify-end gap-2">
+                            <Input
                               type="number"
                               min={0}
                               max={criterion.maxMarks}
@@ -751,11 +756,8 @@ export default function RecruiterSubmission() {
                                   [criterion.id]: event.target.value,
                                 }));
                               }}
-                              className={`w-16 rounded-lg border px-2 py-1 text-right text-sm text-slate-800 focus:outline-none ${
-                                invalid
-                                  ? "border-rose-400 focus:border-rose-500"
-                                  : "border-slate-300 focus:border-indigo-500"
-                              }`}
+                              aria-invalid={invalid || undefined}
+                              className="w-20 text-right"
                             />
                             <span className="text-xs text-slate-500">/ {criterion.maxMarks}</span>
                           </div>
@@ -765,8 +767,9 @@ export default function RecruiterSubmission() {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
-          </article>
+          </Card>
         ))}
       </section>
     </DashboardLayout>

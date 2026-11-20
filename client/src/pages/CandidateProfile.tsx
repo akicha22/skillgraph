@@ -1,3 +1,7 @@
+import { Alert, Card } from "../components/ui/Card";
+import { Button } from "../components/ui/Button";
+import { Field, Input, Textarea } from "../components/ui/Field";
+import { Spinner } from "../components/ui/Feedback";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -21,9 +25,6 @@ import {
   updateLeaderboardOptIn,
 } from "../services/assessments";
 import type { CandidateProfileResponse } from "../types/assessments";
-
-const fieldClass =
-  "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200";
 
 /** The candidate's own profile: who they are, what they can do, and how their attempts have gone. */
 export default function CandidateProfile() {
@@ -167,7 +168,7 @@ export default function CandidateProfile() {
 
   return (
     <DashboardLayout>
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+      <Card>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">{profile.name}</h1>
@@ -204,84 +205,32 @@ export default function CandidateProfile() {
 
         {editing && (
           <form onSubmit={(event) => void save(event)} className="mt-5 grid gap-4 sm:grid-cols-2">
-            <label className="text-sm sm:col-span-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Headline
-              </span>
-              <input
-                value={form.headline}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, headline: event.target.value }))
-                }
-                maxLength={100}
-                placeholder="Operations analyst with a focus on supply planning"
-                className={fieldClass}
-              />
-            </label>
-            <div className="text-sm">
-              <label
-                htmlFor="profile-location"
-                className="text-xs font-semibold uppercase tracking-wide text-slate-500"
-              >
-                Location
-              </label>
-              <div className="mt-1">
-                <LocationInput
-                  id="profile-location"
-                  value={form.location}
-                  onChange={(value) => setForm((prev) => ({ ...prev, location: value }))}
-                  placeholder="Bengaluru"
-                />
-              </div>
+            <div className="sm:col-span-2">
+              <h2 className="font-semibold">Profile details</h2>
+              <p className="text-sm text-slate-600">Update what recruiters see about you.</p>
             </div>
-            <label className="text-sm">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Years of experience
-              </span>
-              <input
-                type="number"
-                min={0}
-                max={50}
-                value={form.yearsExperience}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, yearsExperience: event.target.value }))
-                }
-                placeholder="3"
-                className={fieldClass}
-              />
-            </label>
-            <label className="text-sm sm:col-span-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                About you
-              </span>
-              <textarea
-                rows={5}
-                maxLength={600}
-                value={form.about}
-                onChange={(event) => setForm((prev) => ({ ...prev, about: event.target.value }))}
-                placeholder="What you have worked on, the problems you like, and what you are looking for next."
-                className={fieldClass}
-              />
-              <span className="mt-1 block text-xs text-slate-500">
-                {form.about.length} / 600 characters
-              </span>
-            </label>
-            <div className="flex items-center gap-3 sm:col-span-2">
-              <button
-                type="submit"
-                disabled={saving}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
-              >
-                {saving ? "Saving…" : "Save profile"}
-              </button>
-              {error && <span className="text-xs text-rose-700">{error}</span>}
+            <Field label="Headline" className="sm:col-span-2">
+              {(attributes) => <Input {...attributes} value={form.headline} onChange={(event) => setForm((prev) => ({ ...prev, headline: event.target.value }))} maxLength={100} placeholder="Operations analyst with a focus on supply planning" />}
+            </Field>
+            <Field label="Location" id="profile-location">
+              {({ id }) => <LocationInput id={id} value={form.location} onChange={(value) => setForm((prev) => ({ ...prev, location: value }))} placeholder="Bengaluru" />}
+            </Field>
+            <Field label="Years of experience">
+              {(attributes) => <Input {...attributes} type="number" min={0} max={50} value={form.yearsExperience} onChange={(event) => setForm((prev) => ({ ...prev, yearsExperience: event.target.value }))} placeholder="3" />}
+            </Field>
+            <Field label="About you" hint={`${form.about.length} / 600 characters`} className="sm:col-span-2">
+              {(attributes) => <Textarea {...attributes} rows={5} maxLength={600} value={form.about} onChange={(event) => setForm((prev) => ({ ...prev, about: event.target.value }))} placeholder="What you have worked on, the problems you like, and what you are looking for next." />}
+            </Field>
+            <div className="sticky bottom-[calc(7rem+env(safe-area-inset-bottom))] z-10 flex flex-wrap items-center gap-3 rounded-control border border-slate-200 bg-white p-3 shadow-raised sm:col-span-2 md:static md:border-0 md:p-0 md:shadow-none">
+              <Button type="submit" loading={saving}>{saving ? "Saving…" : "Save profile"}</Button>
+              {saving ? <span role="status" className="inline-flex items-center gap-2 text-sm text-slate-600"><Spinner decorative /> Saving profile</span> : error && <Alert tone="error">{error}</Alert>}
             </div>
           </form>
         )}
-        {notice && <p className="mt-3 text-sm text-emerald-700">{notice}</p>}
-      </section>
+        {notice && <Alert tone="success" role="status" className="mt-3">{notice}</Alert>}
+      </Card>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+      <Card>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <span className="inline-flex rounded-lg bg-indigo-50 p-2 text-indigo-700">
@@ -317,9 +266,9 @@ export default function CandidateProfile() {
           </button>
         </div>
         {leaderboardError && <p className="mt-3 text-sm text-rose-700">{leaderboardError}</p>}
-      </section>
+      </Card>
 
-      <section className="rounded-2xl border border-rose-200 bg-white p-6">
+      <Card className="border-rose-200">
         <div className="flex items-start gap-3">
           <span className="inline-flex rounded-lg bg-rose-50 p-2 text-rose-700">
             <Trash2 className="h-4 w-4" aria-hidden />
@@ -336,23 +285,10 @@ export default function CandidateProfile() {
         </div>
 
         <form onSubmit={(event) => void deleteAccount(event)} className="mt-4 max-w-md">
-          <label
-            htmlFor="delete-account-password"
-            className="text-xs font-semibold uppercase tracking-wide text-slate-500"
-          >
-            Password
-          </label>
-          <input
-            id="delete-account-password"
-            type="password"
-            required
-            autoComplete="current-password"
-            value={deletePassword}
-            onChange={(event) => setDeletePassword(event.target.value)}
-            placeholder="Enter your password to confirm"
-            className={fieldClass}
-          />
-          {deleteError && <p className="mt-2 text-sm text-rose-700">{deleteError}</p>}
+          <Field label="Password" id="delete-account-password" required>
+            {(attributes) => <Input {...attributes} type="password" autoComplete="current-password" value={deletePassword} onChange={(event) => setDeletePassword(event.target.value)} placeholder="Enter your password to confirm" />}
+          </Field>
+          {deleteError && <Alert tone="error" className="mt-3">{deleteError}</Alert>}
           {confirmingDelete ? (
             <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-4">
               <p className="text-sm text-rose-800">
@@ -389,7 +325,7 @@ export default function CandidateProfile() {
             </button>
           )}
         </form>
-      </section>
+      </Card>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
@@ -436,7 +372,7 @@ export default function CandidateProfile() {
         ))}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+      <Card>
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-lg font-semibold text-slate-900">Skills and areas of expertise</h2>
           <Link to="/candidate/skills" className="text-sm font-medium text-indigo-600 hover:underline">
@@ -469,9 +405,9 @@ export default function CandidateProfile() {
             ))}
           </div>
         )}
-      </section>
+      </Card>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+      <Card>
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-lg font-semibold text-slate-900">Assessments you have submitted</h2>
           <Link to="/candidate" className="text-sm font-medium text-indigo-600 hover:underline">
@@ -527,7 +463,7 @@ export default function CandidateProfile() {
             ))}
           </ul>
         )}
-      </section>
+      </Card>
     </DashboardLayout>
   );
 }

@@ -1,6 +1,10 @@
+import { Alert, Badge, Card } from "../components/ui/Card";
+import { Button } from "../components/ui/Button";
+import { Input, Textarea } from "../components/ui/Field";
+import { EmptyState, Skeleton } from "../components/ui/Feedback";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { AlertTriangle, ChevronRight, Lock, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, Lock, Plus, Trash2 } from "lucide-react";
 import DashboardLayout from "../layouts/DashboardLayout";
 import {
   createShortlist,
@@ -180,8 +184,8 @@ export default function RecruiterShortlists() {
 
   return (
     <DashboardLayout>
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
-        <h1 className="text-2xl font-bold text-slate-900">Shortlists</h1>
+      <Card>
+        <h1 className="text-[1.75rem] font-semibold tracking-tight text-slate-900">Shortlists</h1>
         <p className="mt-2 max-w-3xl text-sm text-slate-600">
           Group candidates you want to revisit. A note belongs to this list only and is visible to
           you alone — it is never shown to the candidate or attached to their assessment.
@@ -192,7 +196,7 @@ export default function RecruiterShortlists() {
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               New shortlist
             </span>
-            <input
+            <Input
               value={newName}
               onChange={(event) => {
                 setNewName(event.target.value);
@@ -200,40 +204,35 @@ export default function RecruiterShortlists() {
               }}
               placeholder="e.g. Data analyst — shortlist"
               maxLength={80}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none"
+              className="mt-1"
             />
           </label>
-          <button
+          <Button
             type="submit"
             disabled={creating || !newName.trim()}
-            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            variant="primary" size="sm"
           >
             <Plus className="h-4 w-4" aria-hidden />
             {creating ? "Creating…" : "Create shortlist"}
-          </button>
+          </Button>
         </form>
         {createError && <p className="mt-2 text-sm text-rose-700">{createError}</p>}
-      </section>
+      </Card>
 
       {listError && (
-        <p className="flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          <span>{listError}</span>
-        </p>
+        <Alert tone="error">{listError}</Alert>
       )}
 
       {shortlists !== null && shortlists.length === 0 ? (
-        <p className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
-          No shortlists yet. Create one above, then add candidates from their submission pages.
-        </p>
+        <Card><EmptyState title="No shortlists yet" text="Create one above, then add candidates from their submission pages." /></Card>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[18rem_1fr]">
-          <aside className="rounded-2xl border border-slate-200 bg-white p-3">
+        <div className="grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
+          <aside><Card className="p-3 sm:p-3">
             <h2 className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
               Your lists
             </h2>
             {shortlists === null ? (
-              <p className="px-2 text-sm text-slate-600">Loading…</p>
+              <div role="status" className="mt-3"><span className="sr-only">Loading…</span><Skeleton className="h-16" /></div>
             ) : (
               <ul className="space-y-1">
                 {shortlists.map((shortlist) => {
@@ -243,7 +242,7 @@ export default function RecruiterShortlists() {
                       <button
                         type="button"
                         onClick={() => setParams({ list: shortlist.id })}
-                        className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-sm ${
+                        className={`min-h-11 flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-sm ${
                           current
                             ? "bg-indigo-50 font-medium text-indigo-700"
                             : "text-slate-700 hover:bg-slate-50"
@@ -259,24 +258,19 @@ export default function RecruiterShortlists() {
                 })}
               </ul>
             )}
-          </aside>
+          </Card></aside>
 
           <div className="space-y-4">
             {detailError && (
-              <p className="flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-                <span>{detailError}</span>
-              </p>
+              <Alert tone="error">{detailError}</Alert>
             )}
 
             {selectedId && !loadedDetail && !detailError && (
-              <p className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
-                Loading shortlist…
-              </p>
+              <div role="status" className="mt-3"><span className="sr-only">Loading shortlist…</span><Skeleton className="h-16" /></div>
             )}
 
             {loadedDetail && (
-              <section className="rounded-2xl border border-slate-200 bg-white p-6">
+              <Card>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     {renameOpen ? (
@@ -284,7 +278,7 @@ export default function RecruiterShortlists() {
                         onSubmit={(event) => void handleRename(event)}
                         className="flex flex-wrap items-center gap-2"
                       >
-                        <input
+                        <Input
                           value={renameDraft}
                           onChange={(event) => {
                             setRenameDraft(event.target.value);
@@ -292,30 +286,30 @@ export default function RecruiterShortlists() {
                           }}
                           maxLength={80}
                           aria-label="Shortlist name"
-                          className="w-56 rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none"
+                          className="mt-1"
                         />
-                        <button
+                        <Button
                           type="submit"
                           disabled={
                             savingRename ||
                             !renameDraft.trim() ||
                             renameDraft.trim() === loadedDetail.name
                           }
-                          className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
+                          variant="primary" size="sm"
                         >
                           {savingRename ? "Saving…" : "Save name"}
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                           type="button"
                           onClick={() => {
                             setRenameOpen(false);
                             setRenameDraft(loadedDetail.name);
                             setRenameError(null);
                           }}
-                          className="text-xs font-medium text-slate-600 hover:underline"
+                          variant="secondary" size="sm"
                         >
                           Cancel
-                        </button>
+                        </Button>
                       </form>
                     ) : (
                       <h2 className="text-lg font-semibold text-slate-900">{loadedDetail.name}</h2>
@@ -328,42 +322,40 @@ export default function RecruiterShortlists() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                  <button
+                  <Button
                     type="button"
                     onClick={() => {
                       setRenameOpen(true);
                       setRenameDraft(loadedDetail.name);
                       setRenameError(null);
                     }}
-                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                    variant="secondary" size="sm"
                   >
                     Rename
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
                     onClick={() => void handleDeleteList()}
                     disabled={deletingList}
-                    className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                    variant="danger" size="sm"
                   >
                     <Trash2 className="h-3.5 w-3.5" aria-hidden />
                     {deletingList ? "Deleting…" : "Delete list"}
-                  </button>
+                  </Button>
                   </div>
                 </div>
 
                 {noteError && <p className="mt-2 text-sm text-rose-700">{noteError}</p>}
 
                 {loadedDetail.entries.length === 0 ? (
-                  <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
-                    Nothing on this list yet. Open a submitted attempt and use{" "}
-                    <span className="font-medium">Add to shortlist</span>.
-                  </p>
+                  <EmptyState title="No candidates on this list yet" text="Open a submitted attempt and use Add to shortlist." />
                 ) : (
-                  <ul className="mt-4 space-y-3">
+                  <table role="table" aria-label="Shortlisted candidates" className="mt-4 block w-full text-left md:table md:table-fixed">
+                    <thead className="hidden md:table-header-group"><tr><th scope="col" className="w-1/3 p-3">Candidate</th><th scope="col" className="w-28 p-3">Score</th><th scope="col" className="p-3">Private note and actions</th></tr></thead>
+                    <tbody role="rowgroup" className="block space-y-3 md:table-row-group md:space-y-0">
                     {loadedDetail.entries.map((entry) => (
-                      <li key={entry.id} className="rounded-xl border border-slate-200 p-4">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div className="min-w-0">
+                      <tr role="row" key={entry.id} className="block rounded-card border border-slate-200 bg-white shadow-card md:table-row md:rounded-none md:shadow-none">
+                          <td role="cell" className="block p-3 align-top wrap-break-word md:table-cell">
                             <Link
                               to={`/recruiter/attempts/${entry.attemptId}`}
                               className="inline-flex items-center gap-1 font-semibold text-indigo-700 hover:underline"
@@ -376,19 +368,18 @@ export default function RecruiterShortlists() {
                               {entry.assessment.title} · v{entry.assessment.versionNumber} ·{" "}
                               {entry.assessment.jobTitle}
                             </p>
-                          </div>
-                          <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700">
+                          </td>
+                          <td role="cell" className="block px-3 align-top md:table-cell md:py-3"><Badge tone={entry.scoredCriteria === 0 ? "neutral" : "brand"} className="tabular-nums">
                             {entry.scoredCriteria === 0
                               ? "Not marked"
                               : `${entry.awarded} / ${entry.possible}`}
-                          </span>
-                        </div>
-
-                        <label className="mt-3 block">
+                          </Badge></td>
+                          <td role="cell" className="block p-3 align-top md:table-cell">
+                        <label className="block">
                           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                             Your private note
                           </span>
-                          <textarea
+                          <Textarea
                             value={noteDrafts[entry.id] ?? ""}
                             onChange={(event) => {
                               setSavedEntryId(null);
@@ -398,38 +389,40 @@ export default function RecruiterShortlists() {
                             rows={2}
                             maxLength={2000}
                             placeholder="Why keep this candidate? What to probe at interview?"
-                            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none"
+                            className="mt-1"
                           />
                         </label>
                         <div className="mt-2 flex flex-wrap items-center gap-3">
-                          <button
+                          <Button
                             type="button"
                             onClick={() => void handleSaveNote(entry.id)}
                             disabled={
                               savingEntryId === entry.id ||
                               (noteDrafts[entry.id] ?? "") === entry.note
                             }
-                            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
+                            variant="primary" size="sm"
                           >
                             {savingEntryId === entry.id ? "Saving…" : "Save note"}
-                          </button>
+                          </Button>
                           {savedEntryId === entry.id && (
                             <span className="text-xs text-emerald-700">Note saved</span>
                           )}
-                          <button
+                          <Button
                             type="button"
                             onClick={() => void handleRemoveEntry(entry.id, entry.candidate.name)}
                             disabled={removingEntryId === entry.id}
-                            className="text-xs font-medium text-rose-700 hover:underline disabled:opacity-50"
+                            variant="danger" size="sm"
                           >
                             {removingEntryId === entry.id ? "Removing…" : "Remove from list"}
-                          </button>
+                          </Button>
                         </div>
-                      </li>
+                          </td>
+                      </tr>
                     ))}
-                  </ul>
+                    </tbody>
+                  </table>
                 )}
-              </section>
+              </Card>
             )}
           </div>
         </div>
