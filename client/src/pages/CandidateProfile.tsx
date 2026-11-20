@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
   BadgeCheck,
@@ -7,11 +7,19 @@ import {
   CheckCircle2,
   ClipboardList,
   Pencil,
+  ShieldCheck,
+  Trash2,
   TrendingUp,
 } from "lucide-react";
 import DashboardLayout from "../layouts/DashboardLayout";
 import LocationInput from "../components/LocationInput";
-import { getCandidateProfile, updateCandidateProfile } from "../services/assessments";
+import { useAuth } from "../hooks/useAuth";
+import {
+  deleteCandidateAccount,
+  getCandidateProfile,
+  updateCandidateProfile,
+  updateLeaderboardOptIn,
+} from "../services/assessments";
 import type { CandidateProfileResponse } from "../types/assessments";
 
 const fieldClass =
@@ -19,11 +27,19 @@ const fieldClass =
 
 /** The candidate's own profile: who they are, what they can do, and how their attempts have gone. */
 export default function CandidateProfile() {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
   const [data, setData] = useState<CandidateProfileResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [leaderboardSaving, setLeaderboardSaving] = useState(false);
+  const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [form, setForm] = useState({
     headline: "",
     location: "",
@@ -68,13 +84,55 @@ export default function CandidateProfile() {
         about: form.about,
         yearsExperience: years === "" ? null : Number(years),
       });
-      setData((prev) => (prev ? { ...prev, profile: updated.profile } : prev));
+      setData((prev) =>
+        prev ? { ...prev, profile: { ...prev.profile, ...updated.profile } } : prev,
+      );
       setEditing(false);
       setNotice("Profile updated.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save your profile.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function toggleLeaderboard() {
+    if (!data) return;
+    const next = data.profile.leaderboardOptIn !== true;
+    setLeaderboardSaving(true);
+    setLeaderboardError(null);
+    try {
+      const updated = await updateLeaderboardOptIn(next);
+      setData((prev) =>
+        prev
+          ? { ...prev, profile: { ...prev.profile, leaderboardOptIn: updated.leaderboardOptIn } }
+          : prev,
+      );
+    } catch (err) {
+      setLeaderboardError(
+        err instanceof Error ? err.message : "Could not update the leaderboard setting.",
+      );
+    } finally {
+      setLeaderboardSaving(false);
+    }
+  }
+
+  async function deleteAccount(event: FormEvent) {
+    event.preventDefault();
+    setDeleteError(null);
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      await deleteCandidateAccount(deletePassword);
+      await logout().catch(() => undefined);
+      navigate("/login", { replace: true });
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Could not delete your account.");
+      setDeleting(false);
     }
   }
 
@@ -221,6 +279,116 @@ export default function CandidateProfile() {
           </form>
         )}
         {notice && <p className="mt-3 text-sm text-emerald-700">{notice}</p>}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <span className="inline-flex rounded-lg bg-indigo-50 p-2 text-indigo-700">
+              <ShieldCheck className="h-4 w-4" aria-hidden />
+            </span>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Practice leaderboard</h2>
+              <p className="mt-1 text-sm font-medium text-slate-800">
+                Show my name on the practice leaderboard
+              </p>
+              <p className="mt-1 max-w-xl text-sm text-slate-600">
+                Off by default. When it is off, your name and points are hidden from the public
+                list; you can still see your own totals.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={profile.leaderboardOptIn === true}
+            aria-label="Show my name on the practice leaderboard"
+            onClick={() => void toggleLeaderboard()}
+            disabled={leaderboardSaving}
+            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-60 ${
+              profile.leaderboardOptIn === true ? "bg-indigo-600" : "bg-slate-300"
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                profile.leaderboardOptIn === true ? "translate-x-6" : "translate-x-1"
+              }`}
+            />
+          </button>
+        </div>
+        {leaderboardError && <p className="mt-3 text-sm text-rose-700">{leaderboardError}</p>}
+      </section>
+
+      <section className="rounded-2xl border border-rose-200 bg-white p-6">
+        <div className="flex items-start gap-3">
+          <span className="inline-flex rounded-lg bg-rose-50 p-2 text-rose-700">
+            <Trash2 className="h-4 w-4" aria-hidden />
+          </span>
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">
+              Delete my account and all my data
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm text-slate-600">
+              This permanently deletes your profile, assessment attempts, answers, practice
+              history and leaderboard entry. This cannot be undone.
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={(event) => void deleteAccount(event)} className="mt-4 max-w-md">
+          <label
+            htmlFor="delete-account-password"
+            className="text-xs font-semibold uppercase tracking-wide text-slate-500"
+          >
+            Password
+          </label>
+          <input
+            id="delete-account-password"
+            type="password"
+            required
+            autoComplete="current-password"
+            value={deletePassword}
+            onChange={(event) => setDeletePassword(event.target.value)}
+            placeholder="Enter your password to confirm"
+            className={fieldClass}
+          />
+          {deleteError && <p className="mt-2 text-sm text-rose-700">{deleteError}</p>}
+          {confirmingDelete ? (
+            <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-4">
+              <p className="text-sm text-rose-800">
+                This is permanent. Delete your account and everything in it?
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="submit"
+                  disabled={deleting}
+                  className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-60"
+                >
+                  {deleting ? "Deleting…" : "Yes, delete everything"}
+                </button>
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={() => {
+                    setConfirmingDelete(false);
+                    setDeletePassword("");
+                    setDeleteError(null);
+                  }}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="submit"
+              className="mt-3 rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700"
+            >
+              Delete my account and all my data
+            </button>
+          )}
+        </form>
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

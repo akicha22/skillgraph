@@ -11,9 +11,11 @@ import {
 import DashboardLayout from "../layouts/DashboardLayout";
 import DataPreview from "../components/DataPreview";
 import {
+  agreeToCandidateConsent,
   getAttemptFollowUps,
   getCandidateAssessment,
   getCandidateAttempt,
+  getCandidateProfile,
   saveAttemptFollowUp,
   saveCandidateAnswer,
   startCandidateAttempt,
@@ -39,6 +41,9 @@ export default function CandidateAssessmentPage() {
   const [attemptVersionId, setAttemptVersionId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [starting, setStarting] = useState(false);
+  const [consentAt, setConsentAt] = useState<string | null | undefined>(undefined);
+  const [consentDismissed, setConsentDismissed] = useState(false);
+  const [acceptingConsent, setAcceptingConsent] = useState(false);
   const [savingTaskId, setSavingTaskId] = useState<string | null>(null);
   const [savedTaskId, setSavedTaskId] = useState<string | null>(null);
   const [attemptError, setAttemptError] = useState<string | null>(null);
@@ -104,6 +109,21 @@ export default function CandidateAssessmentPage() {
     };
   }, [versionId]);
 
+  // The consent notice is about a new attempt; a failed read falls back to the server's 403.
+  useEffect(() => {
+    let cancelled = false;
+    getCandidateProfile()
+      .then(({ profile }) => {
+        if (!cancelled) setConsentAt(profile.consentAt);
+      })
+      .catch(() => {
+        // The start endpoint still enforces consent if the profile cannot be read now.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // The questions are derived server-side from the rubric, so the candidate sees exactly what the
   // recruiter sees, with any answer already written.
   useEffect(() => {
@@ -164,6 +184,12 @@ export default function CandidateAssessmentPage() {
       // The questions are only sent once an attempt exists, so the page re-reads them now.
       setAssessment(await getCandidateAssessment(versionId));
     } catch (err) {
+      if (err instanceof ApiError && err.status === 403) {
+        setConsentAt(null);
+        setConsentDismissed(false);
+        setAttemptError(null);
+        return;
+      }
       setAttemptError(
         err instanceof Error
           ? err.message
@@ -171,6 +197,31 @@ export default function CandidateAssessmentPage() {
       );
     } finally {
       setStarting(false);
+    }
+  }
+
+  function beginAttempt() {
+    if (consentAt === null) {
+      setConsentDismissed(false);
+      return;
+    }
+    void startAttempt();
+  }
+
+  async function agreeAndStart() {
+    setAcceptingConsent(true);
+    setAttemptError(null);
+    try {
+      const consent = await agreeToCandidateConsent();
+      setConsentAt(consent.consentAt);
+      setConsentDismissed(true);
+      await startAttempt();
+    } catch (err) {
+      setAttemptError(
+        err instanceof Error ? err.message : "Could not record your agreement.",
+      );
+    } finally {
+      setAcceptingConsent(false);
     }
   }
 
@@ -313,20 +364,62 @@ export default function CandidateAssessmentPage() {
         </p>
       ) : !activeAttempt ? (
         <>
-          <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-6">
-            <h2 className="text-lg font-semibold text-slate-900">Ready to start?</h2>
-            <p className="mt-1 text-sm text-indigo-900">
-              You will see one task at a time and can move between them. Each task has its own answer
-              box, and saved answers are kept if you come back later.
-            </p>
-            <button
-              onClick={() => void startAttempt()}
-              disabled={starting}
-              className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
-            >
-              {starting ? "Starting…" : "Start answering"}
-            </button>
-          </section>
+          {consentAt === null && !consentDismissed ? (
+            <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-6">
+              <h2 className="text-lg font-semibold text-slate-900">
+                Before you start: what this attempt records
+              </h2>
+              <p className="mt-1 text-sm text-indigo-900">
+                To keep the assessment fair, this attempt records:
+              </p>
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-indigo-900">
+                <li>your answers and each saved revision;</li>
+                <li>when you open a task and when an answer is saved;</li>
+                <li>paste events as a size only, never the pasted text;</li>
+                <li>when the tab loses focus.</li>
+              </ul>
+              <p className="mt-3 text-sm text-indigo-900">
+                Only the recruiter who owns this assessment can see this record. You can delete
+                your account and all of this data at any time from your{" "}
+                <Link to="/candidate/profile" className="font-medium underline">
+                  profile
+                </Link>
+                .
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  onClick={() => void agreeAndStart()}
+                  disabled={starting || acceptingConsent}
+                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+                >
+                  {acceptingConsent ? "Starting…" : "I agree and start"}
+                </button>
+                <button
+                  onClick={() => setConsentDismissed(true)}
+                  disabled={starting || acceptingConsent}
+                  className="rounded-lg border border-indigo-300 bg-white px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
+                >
+                  Not now
+                </button>
+              </div>
+              {attemptError && <p className="mt-2 text-sm text-rose-700">{attemptError}</p>}
+            </section>
+          ) : (
+            <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-6">
+              <h2 className="text-lg font-semibold text-slate-900">Ready to start?</h2>
+              <p className="mt-1 text-sm text-indigo-900">
+                You will see one task at a time and can move between them. Each task has its own
+                answer box, and saved answers are kept if you come back later.
+              </p>
+              <button
+                onClick={beginAttempt}
+                disabled={starting || acceptingConsent}
+                className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+              >
+                {starting ? "Starting…" : "Start answering"}
+              </button>
+            </section>
+          )}
 
           <section className="rounded-2xl border border-slate-200 bg-white p-6">
             <h2 className="text-lg font-semibold text-slate-900">Before you start</h2>

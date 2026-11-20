@@ -61,6 +61,22 @@ export default function Leaderboard() {
                 ? "How you rank against other candidates on points earned from daily practice. Solving a task on the first try earns its full points; a retry earns half."
                 : "Candidates ranked by total points earned in daily practice. These points are separate from formal assessment marks."}
             </p>
+            <p className="mt-2 text-sm text-slate-600">
+              {isCandidate ? (
+                <>
+                  Only candidates who opted in from their{" "}
+                  <Link
+                    to="/candidate/profile"
+                    className="font-medium text-indigo-600 hover:underline"
+                  >
+                    profile settings
+                  </Link>{" "}
+                  are listed.
+                </>
+              ) : (
+                "Only candidates who opted in from their profile settings are listed."
+              )}
+            </p>
           </div>
           <Link
             to={isCandidate ? "/candidate/tasks" : "/recruiter"}

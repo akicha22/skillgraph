@@ -2,7 +2,9 @@ import { api } from "./api";
 import type {
   AssessmentList,
   CandidateAssessmentDetail,
+  CandidateConsentResponse,
   CandidateFollowUps,
+  CandidateLeaderboardSetting,
   CandidateProfileResponse,
   CandidateProfileUpdate,
   CandidateTasksResponse,
@@ -223,6 +225,21 @@ export function getCandidateProfile() {
 
 export function updateCandidateProfile(body: CandidateProfileUpdate) {
   return api.patch<{ profile: CandidateProfileResponse["profile"] }>("/candidate/profile", body);
+}
+
+/** Records acceptance of the current version of the candidate consent notice. */
+export function agreeToCandidateConsent() {
+  return api.post<CandidateConsentResponse>("/candidate/profile/consent", { version: "v1" });
+}
+
+/** Shows or hides the candidate's name and points on the public practice leaderboard. */
+export function updateLeaderboardOptIn(optIn: boolean) {
+  return api.put<CandidateLeaderboardSetting>("/candidate/profile/leaderboard", { optIn });
+}
+
+/** Deletes the candidate's account after re-checking their password. */
+export function deleteCandidateAccount(password: string) {
+  return api.del<void>("/candidate/profile", { password });
 }
 
 /** City suggestions for a location field; free text is still accepted by every form. */

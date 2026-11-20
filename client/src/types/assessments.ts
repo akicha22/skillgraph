@@ -645,6 +645,9 @@ export type CandidateProfile = {
   location: string | null;
   about: string | null;
   yearsExperience: number | null;
+  consentVersion: string | null;
+  consentAt: string | null;
+  leaderboardOptIn: boolean | null;
   isDemo: boolean;
   memberSince: string;
 };
@@ -683,6 +686,15 @@ export type CandidateProfileUpdate = {
   location?: string;
   about?: string;
   yearsExperience?: number | null;
+};
+
+export type CandidateConsentResponse = {
+  consentVersion: string;
+  consentAt: string;
+};
+
+export type CandidateLeaderboardSetting = {
+  leaderboardOptIn: boolean | null;
 };
 
 /** One post-submission follow-up question, with the candidate's own answer. */

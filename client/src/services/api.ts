@@ -34,5 +34,5 @@ export const api = {
   put: <T>(path: string, body?: unknown) => request<T>(path, "PUT", body),
   patch: <T>(path: string, body?: unknown) => request<T>(path, "PATCH", body),
   // A 204 has no body, so the parsed result is null.
-  del: <T>(path: string) => request<T>(path, "DELETE"),
+  del: <T>(path: string, body?: unknown) => request<T>(path, "DELETE", body),
 };
