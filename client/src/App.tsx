@@ -16,6 +16,7 @@ import RecruiterShortlists from "./pages/RecruiterShortlists";
 import RecruiterPosts from "./pages/RecruiterPosts";
 import CandidatePosts from "./pages/CandidatePosts";
 import CandidateTasks from "./pages/CandidateTasks";
+import Leaderboard from "./pages/Leaderboard";
 import CandidateProfile from "./pages/CandidateProfile";
 
 export default function App() {
@@ -56,6 +57,22 @@ export default function App() {
             element={
               <ProtectedRoute role="CANDIDATE">
                 <CandidateTasks />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/candidate/leaderboard"
+            element={
+              <ProtectedRoute role="CANDIDATE">
+                <Leaderboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recruiter/leaderboard"
+            element={
+              <ProtectedRoute role="RECRUITER">
+                <Leaderboard />
               </ProtectedRoute>
             }
           />

@@ -1,20 +1,49 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, CheckCircle2, Circle, Clock, Flame, ListChecks } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Flame,
+  Lightbulb,
+  ListChecks,
+  Save,
+  Send,
+  Trophy,
+  XCircle,
+} from "lucide-react";
 import DashboardLayout from "../layouts/DashboardLayout";
-import { completeCandidateTask, listCandidateTasks } from "../services/assessments";
-import type { CandidateTasksResponse } from "../types/assessments";
+import {
+  listCandidateTasks,
+  saveCandidateTaskNote,
+  submitCandidateTaskAnswer,
+} from "../services/assessments";
+import type {
+  CandidateTasksResponse,
+  DailyTask,
+  DailyTaskFeedback,
+} from "../types/assessments";
 
 const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 
-/** Daily practice: unmarked drills drawn from the candidate's own skills. */
+const DIFFICULTY_STYLES: Record<DailyTask["difficulty"], string> = {
+  BEGINNER: "bg-emerald-50 text-emerald-700",
+  INTERMEDIATE: "bg-amber-50 text-amber-800",
+  ADVANCED: "bg-rose-50 text-rose-700",
+};
+
+/** Daily practice: ten drills that climb in difficulty, graded on the server. */
 export default function CandidateTasks() {
   const [data, setData] = useState<CandidateTasksResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notes, setNotes] = useState<Record<string, string>>({});
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  // Bumped after a change so the one loader below re-reads the streak and the seven-day strip.
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [savedNotes, setSavedNotes] = useState<Record<string, string>>({});
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [feedback, setFeedback] = useState<Record<string, DailyTaskFeedback>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [savingNoteId, setSavingNoteId] = useState<string | null>(null);
+  // Bumped after a change so the loader below re-reads the streak and points totals.
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
@@ -23,7 +52,14 @@ export default function CandidateTasks() {
       .then((loaded) => {
         if (cancelled) return;
         setData(loaded);
-        setNotes(Object.fromEntries(loaded.tasks.map((task) => [task.id, task.reflection])));
+        // Keep anything the candidate has typed but not saved across a refetch.
+        setNotes((prev) =>
+          Object.fromEntries(loaded.tasks.map((task) => [task.id, prev[task.id] ?? task.reflection])),
+        );
+        setSavedNotes(Object.fromEntries(loaded.tasks.map((task) => [task.id, task.reflection])));
+        setAnswers((prev) =>
+          Object.fromEntries(loaded.tasks.map((task) => [task.id, prev[task.id] ?? task.answer])),
+        );
         setError(null);
       })
       .catch((err: unknown) => {
@@ -35,18 +71,88 @@ export default function CandidateTasks() {
     };
   }, [reloadToken]);
 
-  async function toggle(taskId: string, done: boolean) {
+  async function submit(taskId: string) {
+    const answer = (answers[taskId] ?? "").trim();
+    if (!answer) {
+      setError("Write an answer before submitting.");
+      return;
+    }
+
     setBusyId(taskId);
+    setError(null);
     setNotice(null);
     try {
-      await completeCandidateTask(taskId, done, notes[taskId] ?? "");
+      const result = await submitCandidateTaskAnswer(taskId, answer);
+      setFeedback((prev) => ({ ...prev, [taskId]: result.feedback }));
+      setAnswers((prev) => ({ ...prev, [taskId]: result.task.answer }));
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              tasks: prev.tasks.map((task) => (task.id === taskId ? result.task : task)),
+              summary: {
+                ...prev.summary,
+                todayDone: prev.tasks.filter((task) =>
+                  task.id === taskId ? result.task.solved : task.solved,
+                ).length,
+                todayPoints:
+                  prev.summary.todayPoints -
+                  (prev.tasks.find((task) => task.id === taskId)?.earnedPoints ?? 0) +
+                  result.task.earnedPoints,
+                totalPoints:
+                  prev.summary.totalPoints -
+                  (prev.tasks.find((task) => task.id === taskId)?.earnedPoints ?? 0) +
+                  result.task.earnedPoints,
+                tasksSolved:
+                  prev.summary.tasksSolved +
+                  (result.task.solved &&
+                  !prev.tasks.find((task) => task.id === taskId)?.solved
+                    ? 1
+                    : 0),
+              },
+            }
+          : prev,
+      );
       setReloadToken((token) => token + 1);
-      setNotice(done ? "Marked done. Small, regular practice is what moves the needle." : "Reopened.");
+      setNotice(
+        result.feedback.correct
+          ? result.feedback.alreadySolved
+            ? "That task is already solved — no additional points."
+            : `Correct! +${result.feedback.awarded} points.`
+          : "Not correct yet. Read the explanation and try again; a correct retry earns half points.",
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update that task.");
+      setError(err instanceof Error ? err.message : "Could not submit that answer.");
     } finally {
       setBusyId(null);
     }
+  }
+
+  async function saveNote(taskId: string) {
+    setSavingNoteId(taskId);
+    setError(null);
+    try {
+      await saveCandidateTaskNote(taskId, notes[taskId] ?? "");
+      setSavedNotes((prev) => ({ ...prev, [taskId]: notes[taskId] ?? "" }));
+      setNotice("Note saved.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save that note.");
+    } finally {
+      setSavingNoteId(null);
+    }
+  }
+
+  function feedbackFor(task: DailyTask): DailyTaskFeedback | null {
+    if (feedback[task.id]) return feedback[task.id];
+    if (task.attempts === 0) return null;
+    return {
+      correct: task.solved,
+      awarded: task.earnedPoints,
+      attempts: task.attempts,
+      explanation: task.explanation ?? "",
+      expectedAnswer: task.expectedAnswer,
+      alreadySolved: false,
+    };
   }
 
   const todayLabel = data
@@ -64,16 +170,18 @@ export default function CandidateTasks() {
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Daily tasks</h1>
             <p className="mt-1 max-w-2xl text-slate-600">
-              Short practice drills chosen from your skills. Nothing here is marked, nobody reviews
-              it, and it is not an assessment — it is how you get ready for one.
+              Ten short drills that start simple and build to application problems. Answer on the
+              page — the server checks your work and awards points once. This is practice, not an
+              assessment.
             </p>
           </div>
           <div className="flex gap-2">
             <Link
-              to="/candidate/posts"
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              to="/candidate/leaderboard"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
-              Opportunities
+              <Trophy className="h-4 w-4" aria-hidden />
+              Leaderboard
             </Link>
             <Link
               to="/candidate"
@@ -92,7 +200,12 @@ export default function CandidateTasks() {
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700">
               <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
-              {data.summary.todayDone} of {data.summary.todayTotal} done today
+              {data.summary.todayDone} of {data.summary.todayTotal} solved today
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 font-medium text-indigo-700">
+              <Trophy className="h-3.5 w-3.5" aria-hidden />
+              {data.summary.totalPoints} points total
+              {data.summary.todayPoints > 0 ? ` · +${data.summary.todayPoints} today` : ""}
             </span>
             {todayLabel && (
               <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">
@@ -153,18 +266,21 @@ export default function CandidateTasks() {
       ) : (
         <ul className="space-y-4">
           {data.tasks.map((task) => {
-            const done = task.status === "DONE";
+            const solved = task.solved;
+            const result = feedbackFor(task);
+            const noteChanged = (notes[task.id] ?? "") !== (savedNotes[task.id] ?? "");
+
             return (
               <li
                 key={task.id}
                 className={`rounded-2xl border bg-white p-6 ${
-                  done ? "border-emerald-200" : "border-slate-200"
+                  solved ? "border-emerald-200" : "border-slate-200"
                 }`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
-                      {task.skillName}
+                      {task.position + 1}. {task.skillName}
                     </p>
                     <h2 className="mt-1 text-lg font-semibold text-slate-900">{task.title}</h2>
                   </div>
@@ -172,8 +288,15 @@ export default function CandidateTasks() {
                     <Clock className="h-3.5 w-3.5" aria-hidden />
                     about {task.estimateMinutes} min
                   </span>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-xs font-medium ${DIFFICULTY_STYLES[task.difficulty]}`}
+                  >
+                    {task.difficulty}
+                  </span>
                   <span className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-medium text-indigo-800">
-                    {task.difficulty} · {task.points} pts
+                    <Trophy className="h-3.5 w-3.5" aria-hidden />
+                    {task.points} pts
+                    {solved ? ` · earned ${task.earnedPoints}` : ""}
                   </span>
                 </div>
 
@@ -197,61 +320,124 @@ export default function CandidateTasks() {
                   </ol>
                 </div>
 
-                <label className="mt-4 block text-sm">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    One line on what you learned (optional)
-                  </span>
-                  <textarea
-                    rows={2}
-                    value={notes[task.id] ?? ""}
-                    onChange={(event) =>
-                      setNotes((prev) => ({ ...prev, [task.id]: event.target.value }))
-                    }
-                    placeholder="What would you do differently next time?"
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none"
-                  />
-                </label>
+                <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
+                  <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-700">
+                    <Lightbulb className="h-3.5 w-3.5" aria-hidden />
+                    Your question
+                  </p>
+                  <p className="mt-2 text-sm font-medium leading-relaxed text-slate-800">
+                    {task.question}
+                  </p>
 
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  {done ? (
-                    <>
-                      <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700">
-                        <CheckCircle2 className="h-4 w-4" aria-hidden />
-                        Done
-                        {task.completedAt
-                          ? ` · ${new Date(task.completedAt).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}`
-                          : ""}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => void toggle(task.id, false)}
-                        disabled={busyId === task.id}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                      >
-                        <Circle className="h-4 w-4" aria-hidden />
-                        Reopen
-                      </button>
-                    </>
+                  {solved ? (
+                    <p className="mt-3 flex items-center gap-2 text-sm text-emerald-700">
+                      <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
+                      Solved with “{task.answer}” — {task.earnedPoints} of {task.points} points.
+                    </p>
                   ) : (
+                    <form
+                      className="mt-3 flex flex-col gap-2 sm:flex-row"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void submit(task.id);
+                      }}
+                    >
+                      <label htmlFor={`answer-${task.id}`} className="sr-only">
+                        Your answer
+                      </label>
+                      <input
+                        id={`answer-${task.id}`}
+                        value={answers[task.id] ?? ""}
+                        onChange={(event) =>
+                          setAnswers((prev) => ({ ...prev, [task.id]: event.target.value }))
+                        }
+                        placeholder="Type your answer"
+                        maxLength={500}
+                        autoComplete="off"
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none"
+                      />
+                      <button
+                        type="submit"
+                        disabled={busyId === task.id || !(answers[task.id] ?? "").trim()}
+                        className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        <Send className="h-4 w-4" aria-hidden />
+                        {busyId === task.id ? "Checking…" : "Submit answer"}
+                      </button>
+                    </form>
+                  )}
+
+                  {result && (
+                    <div
+                      className={`mt-3 rounded-lg border p-3 text-sm ${
+                        result.correct
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                          : "border-rose-200 bg-rose-50 text-rose-800"
+                      }`}
+                    >
+                      <p className="flex items-center gap-1.5 font-medium">
+                        {result.correct ? (
+                          <CheckCircle2 className="h-4 w-4" aria-hidden />
+                        ) : (
+                          <XCircle className="h-4 w-4" aria-hidden />
+                        )}
+                        {result.correct
+                          ? result.alreadySolved
+                            ? "Correct — already solved, no extra points."
+                            : `Correct — +${result.awarded} points.`
+                          : `Not correct yet. Attempt${result.attempts === 1 ? "" : "s"}: ${result.attempts}. A correct retry earns half points.`}
+                      </p>
+                      {result.explanation && <p className="mt-1.5">{result.explanation}</p>}
+                      {result.expectedAnswer && (
+                        <p className="mt-1.5">
+                          Expected answer: <strong>{result.expectedAnswer}</strong>
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4">
+                  <label className="block text-sm">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      One line on what you learned (optional)
+                    </span>
+                    <textarea
+                      rows={2}
+                      value={notes[task.id] ?? ""}
+                      onChange={(event) =>
+                        setNotes((prev) => ({ ...prev, [task.id]: event.target.value }))
+                      }
+                      placeholder="What would you do differently next time?"
+                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none"
+                    />
+                  </label>
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
                     <button
                       type="button"
-                      onClick={() => void toggle(task.id, true)}
-                      disabled={busyId === task.id}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                      onClick={() => void saveNote(task.id)}
+                      disabled={!noteChanged || savingNoteId === task.id}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                     >
-                      <CheckCircle2 className="h-4 w-4" aria-hidden />
-                      {busyId === task.id ? "Saving…" : "Mark done"}
+                      <Save className="h-4 w-4" aria-hidden />
+                      {savingNoteId === task.id ? "Saving…" : "Save note"}
                     </button>
-                  )}
-                  <Link
-                    to="/candidate/skills"
-                    className="ml-auto text-xs font-medium text-slate-500 hover:text-slate-800"
-                  >
-                    Practise something else →
-                  </Link>
+                    {solved && task.completedAt && (
+                      <span className="text-xs text-slate-500">
+                        Solved at{" "}
+                        {new Date(task.completedAt).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    )}
+                    <Link
+                      to="/candidate/leaderboard"
+                      className="ml-auto text-xs font-medium text-slate-500 hover:text-slate-800"
+                    >
+                      See the rankings →
+                    </Link>
+                  </div>
                 </div>
               </li>
             );

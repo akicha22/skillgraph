@@ -577,12 +577,34 @@ export type DailyTask = {
   scenario: string;
   steps: string[];
   estimateMinutes: number;
-  points: number;
   difficulty: "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
+  question: string;
+  /** Points the task is worth; full on a first-attempt correct answer. */
+  points: number;
+  /** Points actually earned; 0 until solved. */
+  earnedPoints: number;
+  attempts: number;
+  answer: string;
+  result: "CORRECT" | "INCORRECT" | null;
+  solved: boolean;
+  /** Only present after the candidate has submitted an answer. */
+  explanation: string | null;
+  expectedAnswer: string | null;
   status: "PENDING" | "DONE";
   reflection: string;
   completedAt: string | null;
 };
+
+export type DailyTaskFeedback = {
+  correct: boolean;
+  awarded: number;
+  attempts: number;
+  explanation: string;
+  expectedAnswer: string | null;
+  alreadySolved: boolean;
+};
+
+export type DailyTaskAnswerResponse = { task: DailyTask; feedback: DailyTaskFeedback };
 
 export type DailyTaskDay = { day: string; total: number; done: number };
 
@@ -591,7 +613,28 @@ export type CandidateTasksResponse = {
   /** True when the candidate has not chosen skills, so there is nothing honest to practise. */
   needsSkills: boolean;
   tasks: DailyTask[];
-  summary: { todayTotal: number; todayDone: number; streakDays: number; last7: DailyTaskDay[] };
+  summary: {
+    todayTotal: number;
+    todayDone: number;
+    todayPoints: number;
+    totalPoints: number;
+    tasksSolved: number;
+    streakDays: number;
+    last7: DailyTaskDay[];
+  };
+};
+
+export type LeaderboardEntry = {
+  rank: number;
+  name: string;
+  points: number;
+  tasksSolved: number;
+  isMe: boolean;
+};
+
+export type LeaderboardResponse = {
+  entries: LeaderboardEntry[];
+  me: { name: string; points: number; tasksSolved: number; rank: number | null };
 };
 
 /** `GET /candidate/profile` — the candidate's own profile and what their assessments show. */

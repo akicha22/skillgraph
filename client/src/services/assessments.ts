@@ -8,6 +8,8 @@ import type {
   CandidateTasksResponse,
   ClarificationQuestion,
   DailyTask,
+  DailyTaskAnswerResponse,
+  LeaderboardResponse,
   LocationSuggestion,
   CriterionScoreInput,
   CandidateAssessmentList,
@@ -199,9 +201,19 @@ export function listCandidateTasks() {
   return api.get<CandidateTasksResponse>("/candidate/tasks");
 }
 
-/** Marks a practice drill done (with an optional note) or reopens it. */
-export function completeCandidateTask(taskId: string, done: boolean, reflection?: string) {
-  return api.put<{ task: DailyTask }>(`/candidate/tasks/${taskId}`, { done, reflection });
+/** Submits an answer; the server grades it and awards points at most once. */
+export function submitCandidateTaskAnswer(taskId: string, answer: string) {
+  return api.post<DailyTaskAnswerResponse>(`/candidate/tasks/${taskId}/answer`, { answer });
+}
+
+/** Saves the private one-line note on a drill. */
+export function saveCandidateTaskNote(taskId: string, reflection: string) {
+  return api.put<{ task: DailyTask }>(`/candidate/tasks/${taskId}`, { reflection });
+}
+
+/** Daily-practice points for every candidate, visible to candidates and recruiters. */
+export function getLeaderboard() {
+  return api.get<LeaderboardResponse>("/leaderboard");
 }
 
 /** The candidate's own profile, skills and assessment statistics. */

@@ -2,7 +2,8 @@
 
  * A task is practice, not an evaluation: there are no marks, no rubric, no attempt and no
  * recruiter visibility. Each day the candidate gets ten short drills drawn from their own skills,
- * ordered from easy (BEGINNER) to hard (ADVANCED), and records a one-line reflection when they finish one.
+ * ordered from easy (BEGINNER) to hard (ADVANCED), each with a checkable question, and can record
+ * a one-line reflection when they finish one.
 
  * Generation is deterministic for a candidate and a day, so the same day always shows the same
  * drills even after a reload.
@@ -12,6 +13,7 @@
  */
 
 import { buildPracticeDrill, type PracticeDrill } from "../assessments/scenarios";
+import { buildDailyQuestion, type DailyDifficulty, type DailyQuestionType } from "./dailyQuestions";
 
 export type PracticeSkill = { id: string; slug: string; name: string };
 
@@ -58,8 +60,13 @@ export type DailyTaskPlan = PracticeDrill & {
   position: number;
   skillId: string;
   skillName: string;
-  difficulty: "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
+  difficulty: DailyDifficulty;
   points: number;
+  question: string;
+  questionType: DailyQuestionType;
+  /** Private answer key; stored with the task and only returned after a submission. */
+  acceptedAnswers: string[];
+  explanation: string;
 }
 
 /** Builds today's drills from the candidate's skills. With no skills chosen there is nothing honest
@@ -75,8 +82,8 @@ export function buildDailyTasks(input: {
   const skills = input.skills.filter((skill) => skill.id);
   if (skills.length === 0) return [];
 
-  // Determine difficulty order: BEGINNER → INTERMEDIATE → ADVANCED
-  // We assign difficulties to task positions 0..9 cyclically based on skill count.
+  // Difficulty climbs in blocks: three warm-up drills, four that add a constraint, three
+  // application problems. The question bank makes the tiers differ in the work required.
   const tasks: DailyTaskPlan[] = [];
 
   for (let pos = 0; pos < 10; pos++) {
@@ -84,11 +91,8 @@ export function buildDailyTasks(input: {
     const skillIndex = (hash(`${input.candidateId}:${input.dateKey}`) + pos) % skills.length;
     const skill = skills[skillIndex];
 
-    // Difficulty progresses: first ~3 tasks BEGINNER, next ~3 INTERMEDIATE, last ~3 ADVANCED
-    let difficulty: "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
-    if (pos < 3) difficulty = "BEGINNER";
-    else if (pos < 6) difficulty = "INTERMEDIATE";
-    else difficulty = "ADVANCED";
+    const difficulty: DailyDifficulty =
+      pos < 3 ? "BEGINNER" : pos < 7 ? "INTERMEDIATE" : "ADVANCED";
 
     const seed = hash(`${input.candidateId}:${input.dateKey}:${skill.id}:${pos}`);
     const drill = buildPracticeDrill({
@@ -98,14 +102,21 @@ export function buildDailyTasks(input: {
       jobTitle: input.jobTitle,
       requirementsText: input.requirementsText,
     });
+    const question = buildDailyQuestion({ seed, family: drill.family, difficulty });
 
     tasks.push({
       ...drill,
+      // The family's open-ended prompts are replaced with hints for the checkable question.
+      steps: question.hints,
       position: pos,
       skillId: skill.id,
       skillName: skill.name,
       difficulty,
       points: DIFFICULTY_POINTS[difficulty],
+      question: question.question,
+      questionType: question.type,
+      acceptedAnswers: question.accepted,
+      explanation: question.explanation,
     });
   }
 

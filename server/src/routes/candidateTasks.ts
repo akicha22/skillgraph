@@ -5,6 +5,8 @@ import { prisma } from "../db";
 import { currentUser, requireAuth, requireRole } from "../middleware/auth";
 import { asyncHandler } from "../utils/asyncHandler";
 import { buildDailyTasks, dayKey, shiftDayKey } from "../tasks/practice";
+import { gradeDailyAnswer, type DailyQuestionType } from "../tasks/dailyQuestions";
+import { awardPoints } from "../tasks/scoring";
 
 /**
  * Daily practice tasks for a candidate.
@@ -25,6 +27,28 @@ function parseSteps(value: string): string[] {
   }
 }
 
+type AnswerKey = { type: DailyQuestionType; accepted: string[]; explanation: string };
+
+function parseAnswerKey(value: string): AnswerKey {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (parsed && typeof parsed === "object") {
+      const record = parsed as Record<string, unknown>;
+      const accepted = Array.isArray(record.accepted)
+        ? record.accepted.filter((row): row is string => typeof row === "string")
+        : [];
+      return {
+        type: record.type === "SHORT_TEXT" ? "SHORT_TEXT" : "NUMBER",
+        accepted,
+        explanation: typeof record.explanation === "string" ? record.explanation : "",
+      };
+    }
+  } catch {
+    // A malformed key must never break the page; it simply grades nothing.
+  }
+  return { type: "NUMBER", accepted: [], explanation: "" };
+}
+
 function serializeTask(task: {
   id: string;
   position: number;
@@ -32,11 +56,24 @@ function serializeTask(task: {
   scenario: string;
   steps: string;
   estimateMinutes: number;
+  difficulty: string;
+  question: string;
+  answerKey: string;
+  answer: string;
+  attempts: number;
+  result: string | null;
+  solved: boolean;
+  points: number;
+  earnedPoints: number;
   status: string;
   reflection: string;
   completedAt: Date | null;
   skill: { name: string };
 }) {
+  const key = parseAnswerKey(task.answerKey);
+  // The expected answer and explanation unlock only after a submission, never before.
+  const revealed = task.attempts > 0;
+
   return {
     id: task.id,
     position: task.position,
@@ -45,6 +82,16 @@ function serializeTask(task: {
     scenario: task.scenario,
     steps: parseSteps(task.steps),
     estimateMinutes: task.estimateMinutes,
+    difficulty: task.difficulty,
+    question: task.question,
+    points: task.points,
+    earnedPoints: task.earnedPoints,
+    attempts: task.attempts,
+    answer: task.answer,
+    result: task.result,
+    solved: task.solved,
+    explanation: revealed ? key.explanation : null,
+    expectedAnswer: revealed ? (key.accepted[0] ?? null) : null,
     status: task.status,
     reflection: task.reflection,
     completedAt: task.completedAt,
@@ -117,10 +164,60 @@ candidateTasksRouter.get(
                 scenario: plan.scenario,
                 steps: JSON.stringify(plan.steps),
                 estimateMinutes: plan.minutes,
+                difficulty: plan.difficulty,
+                question: plan.question,
+                answerKey: JSON.stringify({
+                  type: plan.questionType,
+                  accepted: plan.acceptedAnswers,
+                  explanation: plan.explanation,
+                }),
+                points: plan.points,
               },
             }),
           ),
         );
+        tasks = await tasksForDay(candidateId, today);
+      }
+    }
+
+    // Rows created before the graded-question fields existed have no question. They are
+    // backfilled from the same deterministic plan rather than leaving a blank drill on the page.
+    if (tasks.length > 0 && tasks.some((task) => !task.question)) {
+      const skills = await prisma.candidateSkill.findMany({
+        where: { userId: candidateId },
+        orderBy: { createdAt: "asc" },
+        select: { skill: { select: { id: true, slug: true, name: true } } },
+      });
+      const plans = buildDailyTasks({
+        candidateId,
+        dateKey: today,
+        skills: skills.map((row) => row.skill),
+      });
+      const updates = tasks.flatMap((task) => {
+        const plan = plans.find((row) => row.position === task.position);
+        if (!plan || task.question) return [];
+        return [
+          prisma.dailyTask.update({
+            where: { id: task.id },
+            data: {
+              steps: JSON.stringify(plan.steps),
+              difficulty: plan.difficulty,
+              question: plan.question,
+              points: plan.points,
+              // Tasks completed before grading existed cannot satisfy the new rule.
+              status: "PENDING",
+              completedAt: null,
+              answerKey: JSON.stringify({
+                type: plan.questionType,
+                accepted: plan.acceptedAnswers,
+                explanation: plan.explanation,
+              }),
+            },
+          }),
+        ];
+      });
+      if (updates.length > 0) {
+        await prisma.$transaction(updates);
         tasks = await tasksForDay(candidateId, today);
       }
     }
@@ -149,7 +246,12 @@ candidateTasksRouter.get(
       return { day, ...entry };
     });
 
-    const doneToday = tasks.filter((task) => task.status === "DONE").length;
+    const doneToday = tasks.filter((task) => task.solved).length;
+    const earned = await prisma.dailyTask.aggregate({
+      where: { candidateId, solved: true },
+      _sum: { earnedPoints: true },
+      _count: { _all: true },
+    });
 
     res.json({
       day: today,
@@ -158,6 +260,9 @@ candidateTasksRouter.get(
       summary: {
         todayTotal: tasks.length,
         todayDone: doneToday,
+        todayPoints: tasks.reduce((sum, task) => sum + task.earnedPoints, 0),
+        totalPoints: earned._sum.earnedPoints ?? 0,
+        tasksSolved: earned._count._all,
         streakDays: streakFrom(
           recent.map((row) => row.day),
           today,
@@ -168,34 +273,25 @@ candidateTasksRouter.get(
   }),
 );
 
-const completeSchema = z
+const answerSchema = z
   .object({
-    done: z.boolean(),
     answer: z
       .string()
       .trim()
-      .max(1000, "Keep your answer under 1000 characters")
-      .optional(),
-    reflection: z
-      .string()
-      .trim()
-      .max(1000, "Keep your note under 1000 characters")
-      .optional(),
+      .min(1, "Write an answer first")
+      .max(500, "Keep your answer under 500 characters"),
   })
   .strict();
 
-// Tracks attempt count for point allocation.
-// - First time marking done: full points (difficulty-based: 5/10/15)
-// - Re-marking done after already done: half points (floor)
-// - Reopening a done task resets attempt count and points to 0
-// - Answer submission does not require validation against a key;
-//   any answer is accepted and the task is marked done based on the 'done' flag.
-candidateTasksRouter.put(
-  "/:taskId",
+// Grading happens here, on the server, against the stored private key. A task is only completed
+// by a correct answer: full points on the first attempt, half (rounded down) after any wrong
+// attempt, and nothing for a wrong answer. Re-submitting a solved task never pays again.
+candidateTasksRouter.post(
+  "/:taskId/answer",
   asyncHandler(async (req, res) => {
-    const parsed = completeSchema.safeParse(req.body);
+    const parsed = answerSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Invalid update", details: formatZodIssues(parsed.error) });
+      res.status(400).json({ error: "Invalid answer", details: formatZodIssues(parsed.error) });
       return;
     }
 
@@ -203,54 +299,91 @@ candidateTasksRouter.put(
     const candidateId = currentUser(res).id;
     const task = await prisma.dailyTask.findFirst({
       where: { id: taskId, candidateId },
-      select: {
-        id: true,
-        status: true,
-        done: true,
-        completedAt: true,
-        reflection: true,
-        points: true,
-        skillId: true,
-        position: true,
-      },
+      include: { skill: { select: { name: true } } },
     });
     if (!task) {
       res.status(404).json({ error: "Task not found" });
       return;
     }
 
-    // Compute new status and points based on the done flag and current state
-    let status: "PENDING" | "DONE";
-    let points: number | null = task.points;
+    const key = parseAnswerKey(task.answerKey);
 
-    if (parsed.data.done) {
-      // Marking done: award full points if this is the first time marking done,
-      // otherwise half points (floor) of the original task points on re-attempt.
-      // task.done is true when the task was previously marked done; task.status indicates current state.
-      if (!task.done) {
-        // First time marking done: full points
-        points = task.points;
-      } else {
-        // Re-attempt after already having been done: halve the points (floor)
-        points = Math.max(1, Math.floor(task.points / 2));
-      }
-      status = "DONE";
-    } else {
-      // Reopening a done task: reset points and status to PENDING
-      if (task.status === "DONE") {
-        points = 0;
-      }
-      status = "PENDING";
+    if (task.solved) {
+      res.json({
+        task: serializeTask(task),
+        feedback: {
+          correct: true,
+          awarded: 0,
+          attempts: task.attempts,
+          explanation: key.explanation,
+          expectedAnswer: key.accepted[0] ?? null,
+          alreadySolved: true,
+        },
+      });
+      return;
     }
+
+    const submitted = parsed.data.answer;
+    const correct = gradeDailyAnswer(key.type, key.accepted, submitted);
+    const awarded = correct ? awardPoints(task.points, task.attempts) : 0;
 
     const updated = await prisma.dailyTask.update({
       where: { id: task.id },
       data: {
-        status,
-        completedAt: parsed.data.done ? new Date() : null,
-        reflection: parsed.data.reflection ?? task.reflection,
-        points,
+        answer: submitted,
+        attempts: { increment: 1 },
+        result: correct ? "CORRECT" : "INCORRECT",
+        solved: correct,
+        earnedPoints: awarded,
+        status: correct ? "DONE" : "PENDING",
+        completedAt: correct ? new Date() : null,
       },
+      include: { skill: { select: { name: true } } },
+    });
+
+    res.json({
+      task: serializeTask(updated),
+      feedback: {
+        correct,
+        awarded,
+        attempts: updated.attempts,
+        explanation: key.explanation,
+        expectedAnswer: key.accepted[0] ?? null,
+        alreadySolved: false,
+      },
+    });
+  }),
+);
+
+const noteSchema = z
+  .object({
+    reflection: z.string().trim().max(1000, "Keep your note under 1000 characters"),
+  })
+  .strict();
+
+// The private note is the only thing the candidate can still edit after solving a drill.
+candidateTasksRouter.put(
+  "/:taskId",
+  asyncHandler(async (req, res) => {
+    const parsed = noteSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid note", details: formatZodIssues(parsed.error) });
+      return;
+    }
+
+    const taskId = Array.isArray(req.params.taskId) ? req.params.taskId[0] : req.params.taskId;
+    const task = await prisma.dailyTask.findFirst({
+      where: { id: taskId, candidateId: currentUser(res).id },
+      select: { id: true },
+    });
+    if (!task) {
+      res.status(404).json({ error: "Task not found" });
+      return;
+    }
+
+    const updated = await prisma.dailyTask.update({
+      where: { id: task.id },
+      data: { reflection: parsed.data.reflection },
       include: { skill: { select: { name: true } } },
     });
 

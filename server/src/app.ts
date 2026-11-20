@@ -16,6 +16,7 @@ import { recruiterShortlistsRouter } from "./routes/recruiterShortlists";
 import { candidatePostsRouter, recruiterPostsRouter } from "./routes/posts";
 import { candidateTasksRouter } from "./routes/candidateTasks";
 import { candidateProfileRouter } from "./routes/candidateProfile";
+import { leaderboardRouter } from "./routes/leaderboard";
 import { locationsRouter } from "./routes/locations";
 
 /**
@@ -45,6 +46,7 @@ app.use("/api/candidate/attempts", candidateAttemptsRouter);
 app.use("/api/candidate/posts", candidatePostsRouter);
 app.use("/api/candidate/tasks", candidateTasksRouter);
 app.use("/api/candidate/profile", candidateProfileRouter);
+app.use("/api/leaderboard", leaderboardRouter);
 app.use("/api/locations", locationsRouter);
 app.use("/api/candidate", candidateGuardRouter);
 app.use("/api/recruiter/assessments", recruiterAssessmentsRouter);

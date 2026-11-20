@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildDailyTasks, dayKey, shiftDayKey } from "./practice";
+import { gradeDailyAnswer } from "./dailyQuestions";
+import { awardPoints, rankLeaderboard } from "./scoring";
 
 const SKILLS = [
   { id: "s1", slug: "sales", name: "Sales" },
@@ -82,6 +84,89 @@ test("a different day or candidate changes the practice set", () => {
 
   assert.notDeepEqual(base, nextDay);
   assert.notDeepEqual(base, otherCandidate);
+});
+
+test("difficulty climbs from warm-up to application and pays the matching points", () => {
+  const tasks = buildDailyTasks({
+    candidateId: "cand-1",
+    dateKey: "2026-11-19",
+    skills: SKILLS,
+  });
+
+  assert.deepEqual(
+    tasks.map((task) => task.difficulty),
+    [
+      "BEGINNER",
+      "BEGINNER",
+      "BEGINNER",
+      "INTERMEDIATE",
+      "INTERMEDIATE",
+      "INTERMEDIATE",
+      "INTERMEDIATE",
+      "ADVANCED",
+      "ADVANCED",
+      "ADVANCED",
+    ],
+  );
+  assert.deepEqual(
+    tasks.map((task) => task.points),
+    [5, 5, 5, 10, 10, 10, 10, 15, 15, 15],
+  );
+});
+
+test("every drill has a checkable question with a private answer key", () => {
+  const tasks = buildDailyTasks({
+    candidateId: "cand-1",
+    dateKey: "2026-11-19",
+    skills: SKILLS,
+  });
+
+  for (const task of tasks) {
+    assert.ok(task.question.length > 20);
+    assert.ok(task.acceptedAnswers.length > 0);
+    assert.ok(task.explanation.length > 0);
+    assert.ok(
+      gradeDailyAnswer(task.questionType, task.acceptedAnswers, task.acceptedAnswers[0]),
+      `the stored answer must grade as correct: ${task.question}`,
+    );
+    assert.equal(gradeDailyAnswer(task.questionType, task.acceptedAnswers, "definitely wrong"), false);
+  }
+});
+
+test("numeric answers tolerate currency symbols, commas and rounding", () => {
+  assert.equal(gradeDailyAnswer("NUMBER", ["57600"], "₹57,600"), true);
+  assert.equal(gradeDailyAnswer("NUMBER", ["57600"], "57600.00"), true);
+  assert.equal(gradeDailyAnswer("NUMBER", ["57600"], "56,000"), false);
+  assert.equal(gradeDailyAnswer("SHORT_TEXT", ["14:15", "2:15 pm"], "2:15 PM"), true);
+  assert.equal(gradeDailyAnswer("SHORT_TEXT", ["14:15"], "15:15"), false);
+});
+
+test("points are full on the first attempt and halved after a wrong one", () => {
+  assert.equal(awardPoints(15, 0), 15);
+  assert.equal(awardPoints(15, 1), 7);
+  assert.equal(awardPoints(10, 3), 5);
+  assert.equal(awardPoints(5, 1), 2);
+  assert.equal(awardPoints(1, 1), 1);
+  assert.equal(awardPoints(10, 0), 10);
+});
+
+test("the leaderboard ranks by points and shares rank on a tie", () => {
+  const ranked = rankLeaderboard([
+    { candidateId: "a", name: "Asha", points: 30, tasksSolved: 3 },
+    { candidateId: "b", name: "Bilal", points: 55, tasksSolved: 5 },
+    { candidateId: "c", name: "Chen", points: 30, tasksSolved: 4 },
+    { candidateId: "d", name: "Dana", points: 10, tasksSolved: 1 },
+  ]);
+
+  assert.deepEqual(
+    ranked.map((row) => [row.name, row.rank]),
+    [
+      ["Bilal", 1],
+      ["Chen", 2],
+      ["Asha", 2],
+      ["Dana", 4],
+    ],
+  );
 });
 
 test("practice drills are on-topic and carry no assessment vocabulary", () => {

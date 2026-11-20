@@ -7,12 +7,14 @@ const navByRole: Record<Role, { to: string; label: string; end?: boolean }[]> = 
   CANDIDATE: [
     { to: "/candidate", label: "Overview", end: true },
     { to: "/candidate/tasks", label: "Daily tasks" },
+    { to: "/candidate/leaderboard", label: "Leaderboard" },
     { to: "/candidate/posts", label: "Opportunities" },
     { to: "/candidate/profile", label: "Profile" },
     { to: "/candidate/skills", label: "Skills" },
   ],
   RECRUITER: [
     { to: "/recruiter", label: "Overview", end: true },
+    { to: "/recruiter/leaderboard", label: "Leaderboard" },
     { to: "/recruiter/posts", label: "Requirements posts" },
     { to: "/recruiter/shortlists", label: "Shortlists" },
   ],

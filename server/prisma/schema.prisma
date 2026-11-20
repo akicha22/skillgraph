@@ -315,6 +315,16 @@ model DailyTask {
   scenario        String
   steps           String // JSON array of three prompts the candidate works through
   estimateMinutes Int
+  // The checkable question, its private answer key and the candidate's submission.
+  difficulty      String    @default("BEGINNER") // BEGINNER | INTERMEDIATE | ADVANCED
+  question        String    @default("")
+  answerKey       String    @default("{}") // JSON { type, accepted, explanation }; never sent before a submission
+  answer          String    @default("")
+  attempts        Int       @default(0)
+  result          String? // CORRECT | INCORRECT, null before the first submission
+  solved          Boolean   @default(false)
+  points          Int       @default(0) // points the task is worth
+  earnedPoints    Int       @default(0) // points actually awarded; 0 until solved
   status          String    @default("PENDING") // PENDING | DONE
   reflection      String    @default("")
   completedAt     DateTime?
@@ -323,6 +333,7 @@ model DailyTask {
 
   @@unique([candidateId, day, position])
   @@index([candidateId, day])
+  @@index([candidateId, earnedPoints])
   @@index([skillId])
 }
 
