@@ -2,7 +2,7 @@
  * by the route. Objective tasks are graded; practical outputs are reviewed by the candidate.
  */
 import { detectFamily, type PracticeDrill } from "../assessments/scenarios";
-import { buildDailyQuestion, type DailyDifficulty, type DailyQuestionType } from "./dailyQuestions";
+import { buildDailyQuestion, getDailyBankId, type DailyDifficulty, type DailyQuestionType } from "./dailyQuestions";
 
 export type PracticeSkill = { id: string; slug: string; name: string };
 
@@ -37,14 +37,6 @@ export function shiftDayKey(key: string, days: number): string {
   return dayKey(date);
 }
 
-/** Builds today's drills from the candidate's skills.
-
- * With no skills chosen there is nothing honest to practise, so the list is empty and the page
- * asks the candidate to pick skills first.
-
- * Ten tasks are generated, ordered from easy to hard. When the candidate has fewer than 10 skills,
- * the skills are cycled through in order to fill all 10 positions.
- */
 export type DailyTaskPlan = PracticeDrill & {
   concept: string;
   position: number;
@@ -59,8 +51,8 @@ export type DailyTaskPlan = PracticeDrill & {
   explanation: string;
 }
 
-/** Builds today's drills from the candidate's skills. With no skills chosen there is nothing honest
- * to practise, so the list is empty and the page asks the candidate to pick skills first.
+/** Cycle through selected skills with an exact bank match. Never relabel a fallback
+ * question as practice for an unsupported skill.
  */
 export function buildDailyTasks(input: {
   candidateId: string;
@@ -69,36 +61,28 @@ export function buildDailyTasks(input: {
   jobTitle?: string;
   requirementsText?: string;
 }): DailyTaskPlan[] {
-  const skills = input.skills.filter((skill) => skill.id);
+  const skills = input.skills.flatMap((skill) => {
+    const bank = getDailyBankId(skill.slug);
+    return skill.id && bank ? [{ skill, bank }] : [];
+  });
   if (skills.length === 0) return [];
 
-  // Difficulty climbs in blocks: three warm-up drills, four that add a constraint, three
-  // application problems. The question bank makes the tiers differ in the work required.
   const tasks: DailyTaskPlan[] = [];
-  const usedConcepts = new Set<string>();
-
+  const useAlternate = Number(input.dateKey.slice(-2)) % 2 === 0;
+  const offset = hash(`${input.candidateId}:${input.dateKey}`) % skills.length;
   for (let pos = 0; pos < 10; pos++) {
-    // Cycle through skills: skill at index (offset + pos) % skills.length
-    const skillIndex = (hash(`${input.candidateId}:${input.dateKey}`) + pos) % skills.length;
-    const skill = skills[skillIndex];
-
-    const difficulty: DailyDifficulty =
-      pos < 3 ? "BEGINNER" : pos < 7 ? "INTERMEDIATE" : "ADVANCED";
-
-    const seed = hash(`${input.candidateId}:${input.dateKey}:${skill.id}:${pos}`);
-    const family = detectFamily(skill.slug, skill.name, input.requirementsText ?? input.jobTitle);
-    const question = buildDailyQuestion({
-      seed, family, skill: `${skill.slug} ${skill.name}`, difficulty, used: usedConcepts,
-    });
-    usedConcepts.add(question.concept);
+    const { skill, bank } = skills[(offset + pos) % skills.length];
+    const difficulty: DailyDifficulty = pos < 3 ? "BEGINNER" : pos < 7 ? "INTERMEDIATE" : "ADVANCED";
+    const family = detectFamily(skill.slug, skill.name);
+    const question = buildDailyQuestion(bank, pos, useAlternate);
 
     tasks.push({
       family,
-      title: `${skill.name} · ${question.concept.replace(/-/g, " ")}`,
+      title: `${skill.name} · ${question.format}`,
       concept: question.concept,
       scenario: question.scenario,
       steps: [],
-      minutes: pos < 3 ? 2 : pos < 7 ? 5 : 8,
+      minutes: pos < 3 ? 1 : pos < 7 ? 2 : 3,
       position: pos,
       skillId: skill.id,
       skillName: skill.name,

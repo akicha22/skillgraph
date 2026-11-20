@@ -256,13 +256,13 @@ export default function CandidateTasks() {
         <p className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
           Building today's practice set…
         </p>
-      ) : data.needsSkills ? (
+      ) : data.needsSkills || data.needsSupportedSkills ? (
         <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
           <ListChecks className="mx-auto h-6 w-6 text-slate-400" aria-hidden />
-          <h2 className="mt-2 text-lg font-semibold text-slate-900">Choose your skills first</h2>
+          <h2 className="mt-2 text-lg font-semibold text-slate-900">{data.needsSupportedSkills ? "No daily bank for your selected skills yet" : "Choose your skills first"}</h2>
           <p className="mx-auto mt-1 max-w-md text-sm text-slate-600">
-            Practice tasks are built from the skills on your profile. Pick a few and today's set will
-            appear here.
+            Daily practice is available for Sales, Client Communication, Leadership, Graphic Design,
+            Video Editing, UI/UX Design, Excel, and SQL. Choose a relevant skill to get started.
           </p>
           <Link
             to="/candidate/skills"
@@ -358,7 +358,7 @@ export default function CandidateTasks() {
                         onChange={(event) =>
                           setAnswers((prev) => ({ ...prev, [task.id]: event.target.value }))
                         }
-                        placeholder={task.selfReview ? "Write your output using the details in the brief" : "Type your answer"}
+                        placeholder={task.selfReview ? "A short answer is enough. Use details from the brief." : "Type your answer"}
                         maxLength={500}
                         autoComplete="off"
                         className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none"

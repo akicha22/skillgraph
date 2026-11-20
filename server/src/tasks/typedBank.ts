@@ -1,0 +1,138 @@
+// A slot fixes the type of thinking, even when the candidate switches skills between slots.
+export const FORMATS = ["Spot the issue", "Make a choice", "Correct a mistake", "Write a line", "Put in order", "Make a prediction", "Suggest an idea", "Judge an example", "Set a priority", "Explain a trade-off"] as const;
+type Challenge = readonly [concept: string, brief: string, prompt: string, criteria: string, answer?: string];
+type Slots = readonly [Challenge, Challenge, Challenge, Challenge, Challenge, Challenge, Challenge, Challenge, Challenge, Challenge];
+export const TYPED_BANKS = {
+  "graphic-design": [
+    ["poster-legibility", "A black poster uses dark grey for its heading.", "Name the readability problem.", "The heading and background have too little contrast."],
+    ["logo-export", "A printer needs a logo that can scale without getting blurry. Your files are SVG and JPG.", "Type the better file format.", "SVG can scale its vector paths without pixelation.", "SVG"],
+    ["price-grid", "Prices on a menu jump left and right from one row to the next.", "Describe one alignment fix.", "A consistent price column, preferably right-aligned, makes prices easier to scan."],
+    ["label-copy", "A library flyer says ‘Free equipment access’. Visitors can borrow tools for a week.", "Write a clearer flyer heading.", "Use plain language that makes borrowing tools clear; avoid implying they are free to keep."],
+    ["reading-order", "A clinic poster must show the free check-up offer, the booking number and sponsor credits.", "List those elements in the order people should notice them.", "Lead with the offer, follow with the booking action, then show the credits."],
+    ["crop-consequence", "A square advert places its event date against the right edge. The story version will use a narrower centre crop.", "Predict what a viewer may miss in the story version.", "The outer edges may be cut, so the date may be missing or unreadable."],
+    ["hero-idea", "A bicycle repair shop wants a flyer about fixing bikes instead of replacing them.", "Describe one simple image for the flyer.", "The image should make repair or renewed use obvious, for example a repaired wheel being put back on."],
+    ["wayfinding-review", "A waiting-room sign uses a small orange arrow as its only indication of where visitors should go.", "Explain whether that sign is enough for someone unfamiliar with the clinic.", "An arrow alone doesn't identify the destination; clear text and a visible directional cue would help."],
+    ["flyer-priority", "A flyer has a wrong booking number and slightly uneven margins. It goes to print in five minutes.", "Name the change you would make first and why.", "Correct the booking number first because the error stops readers from acting; margins are less consequential."],
+    ["two-ink-design", "A print shop only has two inks. Your flyer uses a gradient background and an approved two-colour logo.", "Explain what you would simplify and what you would preserve.", "Keep the approved logo and simplify the background to a solid or two-ink treatment that preserves contrast."],
+  ],
+  "video-editing": [
+    ["audio-distortion", "A speaker sounds clear until they shout, when the audio becomes harsh and crackly.", "Name the problem you hear in the loud part.", "Identify distortion or clipping in the loud parts."],
+    ["intro-shot", "A bakery reel needs to show what the shop sells right away. You have a street shot and a tray of fresh bread.", "Type the better opening shot: street or bread.", "The bread communicates what the bakery sells immediately.", "bread"],
+    ["late-subtitle", "A caption appears after the speaker has already finished the sentence.", "Describe the timing correction.", "Move the caption to coincide with the start of the spoken line and keep it available during the line."],
+    ["title-card", "An event recap opens on volunteers cleaning a beach in Mangaluru.", "Write one short opening title for the clip.", "The title identifies the beach cleanup clearly, with location if useful, and is short enough to read on screen."],
+    ["sequence-order", "You have three clips: a door opens, a guest enters, and the guest greets the host.", "List the clips in a natural viewing order.", "Opening, entry, and greeting preserve an understandable sequence of actions."],
+    ["music-over-dialogue", "A reel's music gets louder just as the speaker gives the venue address.", "Predict what viewers may miss and why.", "The music masks the address, making it harder to hear or remember."],
+    ["gap-cover", "An interview cut makes the speaker's head jump. You also have footage of their hands demonstrating the product.", "Suggest one way to hide the jump using the available footage.", "Place the relevant hand footage over the cut while keeping the interview audio continuous."],
+    ["testimonial-context", "A draft testimonial says ‘It was twice as fast’. The raw clip says ‘It was twice as fast during the pilot’.", "Judge whether the shorter version preserves the speaker's meaning.", "It does not: the pilot qualifier limits the claim and must stay attached to it."],
+    ["export-priority", "You can fix one issue before export: the final caption has the wrong date, or a transition feels abrupt.", "Name the first fix and give its reason.", "Correct the caption date first because it misinforms viewers; the abrupt transition is mainly cosmetic."],
+    ["vertical-reframe", "A landscape tutorial shows one hand on each edge. A vertical crop would lose one hand, but showing the whole frame makes both smaller.", "Explain which framing you would use for the key step and why.", "Prefer a framing that keeps the essential actions visible and explain the trade-off between detail size and missing information."],
+  ],
+  excel: [
+    ["id-display", "After import, product ID 0072 appears as 72 in Excel.", "State what changed in the ID.", "The leading zeros were removed when Excel treated the identifier as a number."],
+    ["row-visibility", "Your manager wants to see only Open rows without deleting anything. The options are Filter and Delete.", "Type the feature you would use.", "Filter hides nonmatching rows without deleting them.", "filter"],
+    ["moving-cell", "In B2*F1, B2 should move down as you fill the formula, but the rate in F1 should stay fixed.", "Type the corrected formula starting with =.", "Use an absolute reference for F1 while B2 remains relative.", "=B2*$F$1"],
+    ["column-heading", "A column named ‘Date’ records when payment was received, not when the invoice was issued.", "Write a clearer column heading.", "Payment Received Date or an equivalent wording removes the ambiguity."],
+    ["pivot-check", "Your Excel table has new rows and the pivot is stale.", "Put these steps in order: verify the new rows, share the report, refresh the pivot.", "Verify the new source rows, refresh the pivot, then share the report."],
+    ["range-prediction", "A total uses SUM(B2:B10). A colleague types another amount into B11 manually.", "Predict how the existing total will change.", "A fixed B2:B10 formula excludes the new B11 value, so the total doesn't change."],
+    ["status-validation", "Staff type ‘Done’, ‘done’ and ‘Finished’ for the same status in a shared sheet.", "Suggest one Excel feature to make future entries consistent.", "Data validation with a list gives users a controlled set of accepted status values."],
+    ["sort-review", "A colleague selected only the amounts column to sort an invoice sheet. Invoice numbers stayed in place.", "Explain whether the result is safe to use.", "Sorting only amounts can break the original invoice-to-amount pairings; restore trusted rows before using it."],
+    ["reconcile-priority", "A recurring report has a misspelled title and totals that disagree with the source table.", "Pick the first thing to check and say why.", "Investigate the totals or their source range/filter first because decision-makers rely on the numbers."],
+    ["workbook-source", "A weekly report can use a fixed workbook range or an Excel Table. Staff append rows every Friday.", "Explain which source you would choose and why.", "An Excel Table expands with appended data; state how it avoids missed rows and note any required refresh."],
+  ],
+  "ui-ux-design": [
+    ["ambiguous-button", "A checkout button says Continue but immediately places the order.", "Name what is misleading about the button.", "The label suggests another step rather than a final purchase."],
+    ["empty-action", "An empty saved jobs page can link to Browse jobs or Account settings.", "Type the action that helps users save their first job.", "Browse jobs leads to jobs the user can save.", "Browse jobs"],
+    ["date-message", "A delivery date field says ‘Invalid’ when customers choose a day in the past.", "Replace the error with a message that helps the user fix it.", "Explain that the delivery date must be today or later."],
+    ["test-prompt", "You want to see whether participants can change the receipt email in a prototype.", "Write one test instruction that does not reveal the button or screen.", "Phrase the goal in everyday language without providing the navigation path."],
+    ["checkout-flow", "A shop asks for an address, uses it to show shipping options, then collects payment.", "List those screens in the order you would present them.", "Address, shipping options, then payment follows the dependency between steps."],
+    ["loading-prediction", "On a slow connection, the search button looks unchanged for four seconds after a tap.", "Predict what an impatient user might do.", "They may tap repeatedly because there is no visible confirmation or loading state."],
+    ["urgency-cue", "A dashboard marks urgent jobs only by turning their rows red.", "Suggest one cue that does not depend on colour.", "Use an explicit Urgent text label or a meaningful icon with an accessible label."],
+    ["dialog-review", "An account dialog opens but keyboard focus stays on the page behind it.", "Judge whether the dialog is usable with a keyboard and explain why.", "Users may not reach the dialog controls; focus should move inside appropriately."],
+    ["checkout-priority", "One checkout issue prevents keyboard users from submitting; another leaves uneven padding in a summary card.", "Say which issue should block release and why.", "The keyboard issue blocks completion; the padding issue is cosmetic."],
+    ["guest-choice", "Requiring an account lets customers track orders, but shoppers report abandoning checkout at sign-up.", "Explain the trade-off in offering guest checkout.", "Guest checkout lowers purchase friction; explain how order tracking could work without making account creation mandatory."],
+  ],
+  sql: [
+    ["null-issue", "A query uses `resolved_at = NULL` to find unresolved tickets.", "Name the issue with that condition.", "Ordinary equality does not match SQL NULL; use IS NULL."],
+    ["read-statement", "You need to view customer emails without changing any rows. Choose SELECT or UPDATE.", "Type the statement keyword you would use.", "SELECT reads data without writing it.", "SELECT"],
+    ["reverse-sort", "A report uses ORDER BY issued_at ASC but should show newest invoices first.", "Type the replacement sort keyword.", "DESC sorts newest first.", "DESC"],
+    ["status-filter", "The ticket table has a status column and the report should include only Open tickets.", "Write the WHERE clause for the report.", "A clause equivalent to WHERE status = 'Open' is sufficient."],
+    ["query-order", "You need the invoice ID from an invoices table, restricted to paid rows.", "List FROM, WHERE and SELECT in the order they appear in the written query.", "SELECT, FROM, WHERE is the written clause order."],
+    ["join-effect", "A LEFT JOIN from stores to orders is changed to INNER JOIN.", "Predict what happens to stores without orders.", "They disappear because an inner join requires a matching order."],
+    ["duplicate-check", "A source table should have one row per order ID, but the report appears to repeat some IDs.", "Suggest a SQL check for repeated order IDs.", "Group by order ID and identify groups with more than one row."],
+    ["timestamp-review", "The report needs all of June. Its condition is event_time <= '2026-06-30', and event_time stores timestamps.", "Judge whether late-afternoon events on June 30 will be included.", "A date literal usually compares as midnight, so later events can be missed; use an exclusive July 1 end."],
+    ["update-priority", "A planned UPDATE should affect one batch. The preview shows rows from two batches.", "State the next action and why.", "Stop before writing and fix or verify the batch condition; otherwise unrelated rows may change."],
+    ["union-choice", "Three imports are combined for an audit, and identical rows may be evidence of a duplicate import.", "Explain whether you would use UNION or UNION ALL.", "UNION ALL preserves duplicates for investigation; UNION deduplicates and can hide that evidence."],
+  ],
+  "client-communication": [
+    ["vague-update", "Your draft says ‘We'll send it soon’. The client has asked for an exact time.", "Name what the update is missing.", "It lacks a specific time for delivery or the next update."],
+    ["channel-choice", "A client asks for written confirmation they can refer back to. Your options are email or phone.", "Type the better channel.", "Email provides a written record.", "email"],
+    ["plain-language", "A draft client email says ‘Your shipment encountered a fulfilment exception’. The parcel is delayed.", "Rewrite the sentence in plain language.", "Say directly that the parcel is delayed without using internal jargon."],
+    ["reply-acknowledgement", "A client missed a meeting because your team sent the wrong calendar link.", "Write one opening line that takes responsibility.", "Acknowledge the wrong link and inconvenience without blaming the client."],
+    ["update-structure", "Your email needs to explain a delay, tell the client when you'll update them and include optional background details.", "List these parts in the order you would present them.", "Lead with the delay and follow with the next update before optional detail."],
+    ["jargon-consequence", "Your email asks a new client to confirm the SOW by COB without explaining either term.", "Predict one misunderstanding that could delay their reply.", "They may be unsure what to confirm or when the deadline is, particularly across time zones."],
+    ["clarifying-scope", "A client says ‘make the report simpler’ after viewing a detailed draft.", "Suggest one question that would clarify what they need.", "Ask about the decision or audience the report serves instead of guessing which sections to remove."],
+    ["subject-review", "The subject line reads ‘Quick question’; the email actually needs sign-off by noon to avoid a launch delay.", "Judge whether the subject line gives the recipient enough information.", "It hides both the required sign-off and urgency; state the action and deadline."],
+    ["escalate-client", "You can answer either a client blocked from joining a call that starts in two minutes or a client requesting next month's brochure.", "Choose which message to answer first and explain why.", "Help the blocked client first while the call is still actionable; the brochure is not time-sensitive."],
+    ["early-update", "You can send a partial update on a service delay now or wait until tomorrow for the full explanation; the client has people waiting today.", "Explain how you would balance speed and certainty in your reply.", "Send confirmed facts and an explicit next update without speculating or promising a resolution date."],
+  ],
+  leadership: [
+    ["ownership-gap", "A team note says ‘Someone should check the stock before opening’.", "Name the missing detail that would make someone accountable.", "Assign a named owner or role."],
+    ["coaching-setting", "You need to give one person sensitive feedback. Choose Private or Team meeting.", "Type the setting you would use.", "Private feedback protects dignity and supports an honest discussion.", "Private"],
+    ["specific-feedback", "You told a teammate ‘You're careless’. Two handoffs this week omitted the dispatch date.", "Rewrite the feedback around observable behaviour.", "Refer to the missing dispatch dates and the handoffs rather than calling the person careless."],
+    ["delegation-line", "Ana can prepare the report, but Kai must approve it before it goes to the client.", "Write a short assignment for Ana.", "Assign preparation to Ana and make the approval boundary clear."],
+    ["coaching-sequence", "A new colleague needs to learn a return check. You can demonstrate it, observe their attempt, and give feedback.", "Put those coaching steps in order.", "Demonstrate, observe the attempt, then give feedback on what you saw."],
+    ["meeting-pattern", "The team lead always announces their preferred answer before asking a quiet group for ideas.", "Predict how this may affect discussion.", "People may anchor on the lead's answer or withhold disagreement."],
+    ["team-idea", "Only one person knows how to close the shop, so every absence causes a scramble.", "Suggest one way to build reliable cover.", "Train and verify a backup closer rather than relying on the same person every time."],
+    ["evidence-review", "A performance note says ‘strong leader’ but includes no example of the employee's work.", "Judge whether that note is enough for a fair appraisal.", "It is a label without evidence; cite specific behaviour and impact against role expectations."],
+    ["conflict-priority", "Two supervisors issue conflicting shifts for tomorrow while a longer dispute about scheduling ownership is unresolved.", "State the first step you would take and why.", "Confirm one authoritative schedule for tomorrow to prevent missed coverage, then resolve the ownership dispute."],
+    ["stretch-assignment", "An experienced coworker could finish a report quickly, but a newer teammate needs practice and the deadline has room for review.", "Explain the trade-off in assigning the report to the newer teammate.", "It builds capability but needs review time and oversight; make the support plan explicit."],
+  ],
+  sales: [
+    ["quote-gap", "A buyer supplied a billing address but not the number of licences. The quote requires both.", "Type the missing field: billing address or licence quantity.", "The licence quantity is needed.", "licence quantity"],
+    ["close-stage", "The buyer signed the contract. CRM choices are Lead, Qualified, and Won.", "Type the right deal stage.", "The signed contract makes the deal Won.", "Won"],
+    ["delivery-promise", "A draft quote says ‘delivery guaranteed Friday’, but your warehouse has only confirmed a Friday dispatch.", "Rewrite that delivery promise accurately.", "Say dispatch is planned or confirmed for Friday; do not guarantee receipt that day."],
+    ["buyer-question", "A shop owner wants scanners but says errors happen after items are packed.", "Write one discovery question for the shop owner.", "Ask about the point at which the error first appears instead of assuming the scanner will solve it."],
+    ["handover-order", "A buyer asks for a short demo, then wants to review a quote before signing.", "Put demo, signature and quote in the buyer's requested order.", "Demo, quote, then signature."],
+    ["pricing-impact", "A quote lists the units and price but omits a required setup charge.", "Predict the buyer's likely concern if the charge appears only at checkout.", "The buyer may object to the unexpected total or question transparency."],
+    ["demo-idea", "A buyer has five minutes and cares only about approving returns on a phone.", "Suggest one thing to show first in the demo.", "Show the actual mobile returns approval workflow before unrelated features."],
+    ["forecast-review", "A salesperson marks a deal Won because the buyer said ‘looks good’. No order or approval exists.", "Judge whether the change is justified.", "Interest alone is not a commitment; keep an appropriate open stage until the required confirmation."],
+    ["followup-priority", "A qualified buyer needs a corrected quote by noon; a new lead has asked to hear about the product sometime this week.", "Choose which reply to send first and explain why.", "Prioritise the time-sensitive corrected quote while keeping the new lead on the follow-up list."],
+    ["phased-offer", "A customer needs a lower first-month bill. You cannot reduce the per-seat price but can start with fewer users.", "Explain the trade-off in offering a smaller first rollout.", "Fewer seats reduce initial spend at the same unit price, but fewer people get early access."],
+  ],
+} satisfies Record<string, Slots>;
+
+// Alternatives test different abilities, not the same task with substituted numbers.
+export const ALTERNATES: Record<keyof typeof TYPED_BANKS, Partial<Record<number, Challenge>>> = {
+  "graphic-design": {
+    0: ["trim-risk", "A flyer background stops exactly at the trim line, although the printer requires bleed.", "Name the print setup issue.", "The background needs to extend into the bleed to avoid a white edge after cutting."],
+    6: ["two-language-sign", "A sign has two languages, but one translation takes much more space.", "Suggest one layout idea that keeps both languages readable.", "Use separate lines or blocks at similar size and adjust the layout rather than shrinking one language."],
+  },
+  "video-editing": {
+    0: ["hand-switch", "In one shot the host holds a mug in their right hand. In the next shot it jumps to the left with no visible movement.", "Name the editing problem.", "The unexplained hand switch breaks continuity between shots."],
+    6: ["room-sound", "A pause was cut from an interview. The join now has a short silent gap although the rest has background room sound.", "Suggest one way to make the gap sound natural.", "Fill it with matching room tone and blend the edges."],
+  },
+  excel: {
+    0: ["number-as-text", "One cell shows a green triangle and Excel warns that the number is stored as text.", "Name the data type issue.", "The value is text, so numeric formatting or calculations might not treat it as a number."],
+    6: ["sheet-navigation", "Staff lose track of the column labels as they scroll through a long sheet.", "Suggest one Excel feature that makes the labels stay visible.", "Freeze the header row using Freeze Panes."],
+  },
+  "ui-ux-design": {
+    0: ["hidden-field-label", "A form field uses placeholder text as its only label. The hint disappears while typing.", "Name the usability problem.", "Once typing starts, the user can no longer see what the field is for."],
+    6: ["typo-recovery", "A search for ‘headphnes’ returns no results, even though headphones are stocked.", "Suggest one improvement to the no-results screen.", "Offer a corrected spelling or another relevant path rather than leaving a dead end."],
+  },
+  sql: {
+    0: ["quoted-status", "A query compares status = Open; the database reports that column Open does not exist.", "State why the database is treating Open as a column.", "An unquoted word is parsed as an identifier rather than a string literal."],
+    6: ["report-grain", "The support team wants counts of open tickets split by team rather than a single total.", "Suggest one SQL change to produce the team breakdown.", "Group by the team column and count tickets in each team."],
+  },
+  "client-communication": {
+    0: ["unclear-owner", "A recap says ‘The document will be sent on Friday’ but never says who will send it.", "Name what is missing from the action item.", "A named person or team should own sending the document."],
+    6: ["update-channel", "A client keeps asking different staff for the same ticket update because replies go to separate email chains.", "Suggest one way to keep future updates easy to find.", "Use one agreed thread or shared ticket reference for subsequent updates."],
+  },
+  leadership: {
+    0: ["success-gap", "A new teammate is told to ‘handle the report’ but receives no description of what finished work looks like.", "Name the missing part of the assignment.", "Define the expected output or completion criteria."],
+    6: ["quieter-voices", "Two people dominate a weekly problem-solving meeting and several teammates rarely speak.", "Suggest one way to collect ideas from more team members.", "Use a short written idea round or an equivalent method that gives everyone space before discussion."],
+  },
+  sales: {
+    0: ["unconfirmed-approver", "The main product user likes the demo, but says someone else must approve purchases.", "Identify the missing stakeholder information.", "Find out who has authority to approve the purchase."],
+    6: ["trial-goal", "A buyer wants to trial the product because manual returns often go to the wrong person.", "Suggest one useful success measure for the sales trial.", "Track correctly routed returns or fewer misrouted cases instead of just trial logins."],
+  },
+};

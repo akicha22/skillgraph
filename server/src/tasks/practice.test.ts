@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildDailyTasks, dayKey, shiftDayKey } from "./practice";
-import { BANKS, EXTRA, TIER_RANGE } from "./dailyBank";
+import { ALTERNATES, FORMATS, TYPED_BANKS } from "./typedBank";
 import { gradeDailyAnswer } from "./dailyQuestions";
 import { awardPoints, rankLeaderboard } from "./scoring";
 
@@ -50,12 +50,13 @@ test("a day's set has ten drills, drawn only from the candidate's skills", () =>
     assert.ok(task.title.includes(task.skillName));
     assert.equal(task.steps.length, 0);
   }
-  // With cycling, some skills repeat across 10 positions; verify no unexpected IDs.
+  assert.equal(new Set(tasks.map((task) => task.title.split(" · ")[1])).size, 10);
+  // With cycling, some skills repeat across 10 positions.
   const skillIds = tasks.map((task) => task.skillId);
   const uniqueCount = new Set(skillIds).size;
-  // With 5 skills we expect all unique; with fewer, some repeat but total is 10.
+  // The full selected skill list participates.
   assert.equal(tasks.length, 10);
-  assert(uniqueCount >= 1 && uniqueCount <= tasks.length);
+  assert.equal(uniqueCount, SKILLS.length);
 });
 
 test("small skill sets still receive ten distinct challenges", () => {
@@ -118,29 +119,48 @@ test("difficulty climbs from warm-up to application and pays the matching points
 test("the curated banks have unique concepts, single prompts and evaluation criteria", () => {
   const ids = new Set<string>();
   const prompts = new Set<string>();
-  for (const bank of [...Object.values(BANKS), ...Object.values(EXTRA)]) {
+  for (const bank of [...Object.values(TYPED_BANKS), ...Object.values(ALTERNATES).map((alternates) => Object.values(alternates).filter((entry) => entry !== undefined))]) {
     for (const [id, brief, prompt, criteria, answer] of bank) {
       assert.ok(!ids.has(id), id);
       assert.ok(!prompts.has(prompt), prompt);
       ids.add(id);
       prompts.add(prompt);
       assert.ok(brief && criteria);
-      assert.match(prompt, /^[^.?!]+[.]$/);
+      assert.match(prompt, /^[^?!]+[.]$/);
       if (answer) assert.ok(gradeDailyAnswer("SHORT_TEXT", [answer], answer));
     }
   }
 });
 
 test("dedicated skills select their own tiered concepts", () => {
-  for (const [slug, bank] of [["graphic-design", "CREATIVE"], ["video-editing", "VIDEO"], ["excel", "EXCEL"], ["ui-ux-design", "UX"], ["sql", "SQL"]] as const) {
+  for (const [slug, bank] of Object.entries(TYPED_BANKS)) {
     const tasks = buildDailyTasks({ candidateId: "c", dateKey: "2026-11-19", skills: [{ id: slug, slug, name: slug }] });
-    assert.equal(new Set(tasks.map((task) => task.concept)).size, 10);
+    assert.deepEqual(tasks.map((task) => task.concept), bank.map(([id]) => id));
+    assert.deepEqual(tasks.map((task) => task.title.split(" · ")[1]), FORMATS);
     for (const task of tasks) {
-      assert.ok([...BANKS[bank].slice(...TIER_RANGE[task.difficulty]), EXTRA[bank][task.position < 3 ? 0 : task.position < 7 ? 1 : 2]].some(([id]) => task.concept === id));
+      assert.equal(task.skillId, slug);
+      assert.notEqual(task.questionType, "NUMBER");
       assert.equal(gradeDailyAnswer(task.questionType, task.acceptedAnswers, "generic answer"), false);
       assert.ok(task.explanation);
     }
   }
+});
+
+test("a one-skill profile can get different concepts without repeating formats", () => {
+  const input = { candidateId: "c", skills: [SKILLS[1]] };
+  const previous = buildDailyTasks({ ...input, dateKey: "2026-11-19" });
+  const next = buildDailyTasks({ ...input, dateKey: "2026-11-20" });
+  assert.notDeepEqual(previous.map((task) => task.concept), next.map((task) => task.concept));
+  assert.deepEqual(previous.map((task) => task.title), next.map((task) => task.title));
+});
+
+test("unsupported skills never get unrelated tasks, even beside a supported skill", () => {
+  const unsupported = { id: "unsupported", slug: "civil-engineering", name: "Civil engineering" };
+  const input = { candidateId: "c", dateKey: "2026-11-19", jobTitle: "Graphic designer" };
+  assert.deepEqual(buildDailyTasks({ ...input, skills: [unsupported] }), []);
+  const tasks = buildDailyTasks({ ...input, skills: [unsupported, SKILLS[1]] });
+  assert.equal(tasks.length, 10);
+  assert.ok(tasks.every((task) => task.skillId === SKILLS[1].id));
 });
 
 test("numeric answers tolerate currency symbols, commas and rounding", () => {
@@ -188,7 +208,7 @@ test("practice drills are on-topic and carry no assessment vocabulary", () => {
   for (const task of tasks) {
     assert.doesNotMatch(task.scenario, /undefined|null|NaN/);
     assert.doesNotMatch(task.scenario, /marks|rubric/i);
-    assert.equal(task.minutes, task.position < 3 ? 2 : task.position < 7 ? 5 : 8);
+    assert.equal(task.minutes, task.position < 3 ? 1 : task.position < 7 ? 2 : 3);
     assert.ok(task.scenario.length > 20);
   }
 });
